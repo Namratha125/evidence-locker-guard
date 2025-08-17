@@ -14,16 +14,346 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      audit_logs: {
+        Row: {
+          action: string
+          details: Json | null
+          id: string
+          ip_address: unknown | null
+          resource_id: string
+          resource_type: string
+          timestamp: string | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          details?: Json | null
+          id?: string
+          ip_address?: unknown | null
+          resource_id: string
+          resource_type: string
+          timestamp?: string | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          details?: Json | null
+          id?: string
+          ip_address?: unknown | null
+          resource_id?: string
+          resource_type?: string
+          timestamp?: string | null
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cases: {
+        Row: {
+          case_number: string
+          created_at: string | null
+          created_by: string
+          description: string | null
+          id: string
+          lead_investigator_id: string | null
+          priority: string | null
+          status: string | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          case_number: string
+          created_at?: string | null
+          created_by: string
+          description?: string | null
+          id?: string
+          lead_investigator_id?: string | null
+          priority?: string | null
+          status?: string | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          case_number?: string
+          created_at?: string | null
+          created_by?: string
+          description?: string | null
+          id?: string
+          lead_investigator_id?: string | null
+          priority?: string | null
+          status?: string | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cases_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cases_lead_investigator_id_fkey"
+            columns: ["lead_investigator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chain_of_custody: {
+        Row: {
+          action: Database["public"]["Enums"]["custody_action"]
+          evidence_id: string
+          from_user_id: string | null
+          id: string
+          location: string | null
+          notes: string | null
+          timestamp: string | null
+          to_user_id: string | null
+        }
+        Insert: {
+          action: Database["public"]["Enums"]["custody_action"]
+          evidence_id: string
+          from_user_id?: string | null
+          id?: string
+          location?: string | null
+          notes?: string | null
+          timestamp?: string | null
+          to_user_id?: string | null
+        }
+        Update: {
+          action?: Database["public"]["Enums"]["custody_action"]
+          evidence_id?: string
+          from_user_id?: string | null
+          id?: string
+          location?: string | null
+          notes?: string | null
+          timestamp?: string | null
+          to_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chain_of_custody_evidence_id_fkey"
+            columns: ["evidence_id"]
+            isOneToOne: false
+            referencedRelation: "evidence"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chain_of_custody_from_user_id_fkey"
+            columns: ["from_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chain_of_custody_to_user_id_fkey"
+            columns: ["to_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      evidence: {
+        Row: {
+          case_id: string
+          collected_by: string | null
+          collected_date: string | null
+          created_at: string | null
+          description: string | null
+          file_name: string | null
+          file_path: string | null
+          file_size: number | null
+          file_type: string | null
+          hash_value: string | null
+          id: string
+          location_found: string | null
+          status: Database["public"]["Enums"]["evidence_status"] | null
+          title: string
+          updated_at: string | null
+          uploaded_by: string
+        }
+        Insert: {
+          case_id: string
+          collected_by?: string | null
+          collected_date?: string | null
+          created_at?: string | null
+          description?: string | null
+          file_name?: string | null
+          file_path?: string | null
+          file_size?: number | null
+          file_type?: string | null
+          hash_value?: string | null
+          id?: string
+          location_found?: string | null
+          status?: Database["public"]["Enums"]["evidence_status"] | null
+          title: string
+          updated_at?: string | null
+          uploaded_by: string
+        }
+        Update: {
+          case_id?: string
+          collected_by?: string | null
+          collected_date?: string | null
+          created_at?: string | null
+          description?: string | null
+          file_name?: string | null
+          file_path?: string | null
+          file_size?: number | null
+          file_type?: string | null
+          hash_value?: string | null
+          id?: string
+          location_found?: string | null
+          status?: Database["public"]["Enums"]["evidence_status"] | null
+          title?: string
+          updated_at?: string | null
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "evidence_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "evidence_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      evidence_tags: {
+        Row: {
+          evidence_id: string
+          tag_id: string
+        }
+        Insert: {
+          evidence_id: string
+          tag_id: string
+        }
+        Update: {
+          evidence_id?: string
+          tag_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "evidence_tags_evidence_id_fkey"
+            columns: ["evidence_id"]
+            isOneToOne: false
+            referencedRelation: "evidence"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "evidence_tags_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          badge_number: string | null
+          created_at: string | null
+          department: string | null
+          full_name: string
+          id: string
+          role: Database["public"]["Enums"]["user_role"]
+          updated_at: string | null
+          username: string
+        }
+        Insert: {
+          badge_number?: string | null
+          created_at?: string | null
+          department?: string | null
+          full_name: string
+          id: string
+          role?: Database["public"]["Enums"]["user_role"]
+          updated_at?: string | null
+          username: string
+        }
+        Update: {
+          badge_number?: string | null
+          created_at?: string | null
+          department?: string | null
+          full_name?: string
+          id?: string
+          role?: Database["public"]["Enums"]["user_role"]
+          updated_at?: string | null
+          username?: string
+        }
+        Relationships: []
+      }
+      tags: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          created_by: string
+          id: string
+          name: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          created_by: string
+          id?: string
+          name: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          created_by?: string
+          id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tags_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_role: {
+        Args: { user_id: string }
+        Returns: Database["public"]["Enums"]["user_role"]
+      }
     }
     Enums: {
-      [_ in never]: never
+      custody_action:
+        | "created"
+        | "transferred"
+        | "accessed"
+        | "downloaded"
+        | "modified"
+        | "archived"
+      evidence_status: "pending" | "verified" | "archived" | "disposed"
+      user_role: "admin" | "investigator" | "analyst" | "legal"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +480,17 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      custody_action: [
+        "created",
+        "transferred",
+        "accessed",
+        "downloaded",
+        "modified",
+        "archived",
+      ],
+      evidence_status: ["pending", "verified", "archived", "disposed"],
+      user_role: ["admin", "investigator", "analyst", "legal"],
+    },
   },
 } as const
