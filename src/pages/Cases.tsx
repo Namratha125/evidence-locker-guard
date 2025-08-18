@@ -36,7 +36,7 @@ const Cases = () => {
         .from('cases')
         .select(`
           *,
-          lead_investigator:profiles(full_name)
+          lead_investigator:profiles!lead_investigator_id(full_name)
         `)
         .order('created_at', { ascending: false });
 
