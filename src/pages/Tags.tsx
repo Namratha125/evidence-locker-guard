@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Search, Plus, Tag, Edit, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import CreateTagDialog from '@/components/CreateTagDialog';
 
 interface TagItem {
   id: string;
@@ -22,6 +23,7 @@ const Tags = () => {
   const [tags, setTags] = useState<TagItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -78,7 +80,7 @@ const Tags = () => {
           <h1 className="text-3xl font-bold">Tag Management</h1>
           <p className="text-muted-foreground">Organize evidence with custom tags and labels</p>
         </div>
-        <Button>
+        <Button onClick={() => setCreateDialogOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Create Tag
         </Button>
@@ -153,6 +155,12 @@ const Tags = () => {
           ))
         )}
       </div>
+      
+      <CreateTagDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        onTagCreated={fetchTags}
+      />
     </div>
   );
 };

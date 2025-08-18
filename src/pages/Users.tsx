@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import AddUserDialog from '@/components/AddUserDialog';
 
 interface User {
   id: string;
@@ -25,6 +26,7 @@ const Users = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('all');
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
   const { toast } = useToast();
   const { profile } = useAuth();
 
@@ -116,7 +118,7 @@ const Users = () => {
           <h1 className="text-3xl font-bold">User Management</h1>
           <p className="text-muted-foreground">Manage user accounts, roles, and permissions</p>
         </div>
-        <Button>
+        <Button onClick={() => setAddDialogOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Add User
         </Button>
@@ -209,6 +211,12 @@ const Users = () => {
           ))
         )}
       </div>
+      
+      <AddUserDialog
+        open={addDialogOpen}
+        onOpenChange={setAddDialogOpen}
+        onUserAdded={fetchUsers}
+      />
     </div>
   );
 };

@@ -3,10 +3,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Plus, FileText, Download, Eye } from 'lucide-react';
+import { Search, Plus, FileText, Download, Eye, Link2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import UploadEvidenceDialog from '@/components/UploadEvidenceDialog';
+import ChainOfCustodyDialog from '@/components/ChainOfCustodyDialog';
 
 interface Evidence {
   id: string;
@@ -31,6 +32,8 @@ const Evidence = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [custodyDialogOpen, setCustodyDialogOpen] = useState(false);
+  const [selectedEvidenceId, setSelectedEvidenceId] = useState('');
   const { toast } = useToast();
 
   useEffect(() => {
@@ -161,6 +164,16 @@ const Evidence = () => {
                     </CardDescription>
                   </div>
                   <div className="flex gap-2">
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => {
+                        setSelectedEvidenceId(item.id);
+                        setCustodyDialogOpen(true);
+                      }}
+                    >
+                      <Link2 className="h-4 w-4" />
+                    </Button>
                     <Button size="sm" variant="outline">
                       <Eye className="h-4 w-4" />
                     </Button>
@@ -195,6 +208,12 @@ const Evidence = () => {
         open={uploadDialogOpen}
         onOpenChange={setUploadDialogOpen}
         onEvidenceUploaded={fetchEvidence}
+      />
+      
+      <ChainOfCustodyDialog
+        open={custodyDialogOpen}
+        onOpenChange={setCustodyDialogOpen}
+        evidenceId={selectedEvidenceId}
       />
     </div>
   );
