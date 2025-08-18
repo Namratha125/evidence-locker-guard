@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Search, Plus, FolderOpen } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import CreateCaseDialog from '@/components/CreateCaseDialog';
 
 interface Case {
   id: string;
@@ -24,6 +25,7 @@ const Cases = () => {
   const [cases, setCases] = useState<Case[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -100,7 +102,7 @@ const Cases = () => {
           <h1 className="text-3xl font-bold">Case Management</h1>
           <p className="text-muted-foreground">Manage and track investigation cases</p>
         </div>
-        <Button>
+        <Button onClick={() => setCreateDialogOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
           New Case
         </Button>
@@ -169,6 +171,12 @@ const Cases = () => {
           ))
         )}
       </div>
+      
+      <CreateCaseDialog 
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        onCaseCreated={fetchCases}
+      />
     </div>
   );
 };

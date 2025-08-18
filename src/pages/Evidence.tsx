@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Search, Plus, FileText, Download, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import UploadEvidenceDialog from '@/components/UploadEvidenceDialog';
 
 interface Evidence {
   id: string;
@@ -29,6 +30,7 @@ const Evidence = () => {
   const [evidence, setEvidence] = useState<Evidence[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -110,7 +112,7 @@ const Evidence = () => {
           <h1 className="text-3xl font-bold">Evidence Management</h1>
           <p className="text-muted-foreground">Upload, manage, and track digital evidence</p>
         </div>
-        <Button>
+        <Button onClick={() => setUploadDialogOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Upload Evidence
         </Button>
@@ -188,6 +190,12 @@ const Evidence = () => {
           ))
         )}
       </div>
+      
+      <UploadEvidenceDialog 
+        open={uploadDialogOpen}
+        onOpenChange={setUploadDialogOpen}
+        onEvidenceUploaded={fetchEvidence}
+      />
     </div>
   );
 };
