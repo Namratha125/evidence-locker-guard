@@ -60,10 +60,13 @@ export type Database = {
       }
       cases: {
         Row: {
+          assigned_to: string | null
           case_number: string
           created_at: string | null
           created_by: string
           description: string | null
+          due_date: string | null
+          findings: string | null
           id: string
           lead_investigator_id: string | null
           priority: string | null
@@ -72,10 +75,13 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          assigned_to?: string | null
           case_number: string
           created_at?: string | null
           created_by: string
           description?: string | null
+          due_date?: string | null
+          findings?: string | null
           id?: string
           lead_investigator_id?: string | null
           priority?: string | null
@@ -84,10 +90,13 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          assigned_to?: string | null
           case_number?: string
           created_at?: string | null
           created_by?: string
           description?: string | null
+          due_date?: string | null
+          findings?: string | null
           id?: string
           lead_investigator_id?: string | null
           priority?: string | null
@@ -96,6 +105,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "cases_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "cases_created_by_fkey"
             columns: ["created_by"]
@@ -163,6 +179,51 @@ export type Database = {
             columns: ["to_user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comments: {
+        Row: {
+          case_id: string | null
+          content: string
+          created_at: string
+          created_by: string
+          evidence_id: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          case_id?: string | null
+          content: string
+          created_at?: string
+          created_by: string
+          evidence_id?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          case_id?: string | null
+          content?: string
+          created_at?: string
+          created_by?: string
+          evidence_id?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comments_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_evidence_id_fkey"
+            columns: ["evidence_id"]
+            isOneToOne: false
+            referencedRelation: "evidence"
             referencedColumns: ["id"]
           },
         ]

@@ -3,11 +3,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Plus, FolderOpen } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Search, Plus, FolderOpen, Edit, MessageSquare, Calendar, User } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { format } from 'date-fns';
 import CreateCaseDialog from '@/components/CreateCaseDialog';
+import EditCaseDialog from '@/components/EditCaseDialog';
+import CommentsSection from '@/components/CommentsSection';
+import AdvancedSearch from '@/components/AdvancedSearch';
 
 interface Case {
   id: string;
@@ -17,34 +22,74 @@ interface Case {
   status: string;
   priority: string;
   created_at: string;
-  lead_investigator?: {
+  created_by: string;
+  lead_investigator_id: string;
+  assigned_to: string | null;
+  findings: string | null;
+  due_date: string | null;
+  assigned_user?: {
+    full_name: string;
+  } | null;
+  creator?: {
     full_name: string;
   } | null;
 }
 
-const Cases = () => {
+export default function Cases() {
   const [cases, setCases] = useState<Case[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [filteredCases, setFilteredCases] = useState<Case[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [selectedCase, setSelectedCase] = useState<Case | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isCommentsDialogOpen, setIsCommentsDialogOpen] = useState(false);
+  const [users, setUsers] = useState<Array<{ id: string; full_name: string }>>([]);
   const { toast } = useToast();
 
   useEffect(() => {
     fetchCases();
+    fetchUsers();
   }, []);
+
+  useEffect(() => {
+    filterCases();
+  }, [cases, searchQuery]);
 
   const fetchCases = async () => {
     try {
-      const { data, error } = await supabase
+      setIsLoading(true);
+      const { data: casesData, error } = await supabase
         .from('cases')
-        .select(`
-          *,
-          lead_investigator:profiles!lead_investigator_id(full_name)
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setCases(data || []);
+
+      // Fetch user profiles separately for assignment data
+      if (casesData && casesData.length > 0) {
+        const userIds = [...new Set([
+          ...casesData.map(c => c.assigned_to).filter(Boolean),
+          ...casesData.map(c => c.created_by).filter(Boolean)
+        ])];
+
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', userIds);
+
+        const profilesMap = new Map(profilesData?.map(p => [p.id, p]) || []);
+        
+        const casesWithProfiles = casesData.map(case_ => ({
+          ...case_,
+          assigned_user: case_.assigned_to ? profilesMap.get(case_.assigned_to) : null,
+          creator: profilesMap.get(case_.created_by) || null
+        }));
+
+        setCases(casesWithProfiles);
+      } else {
+        setCases([]);
+      }
     } catch (error: any) {
       toast({
         title: "Error",
@@ -52,33 +97,74 @@ const Cases = () => {
         variant: "destructive",
       });
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  const filteredCases = cases.filter(c =>
-    c.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.case_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.description?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const fetchUsers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .order('full_name');
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'destructive';
-      case 'medium': return 'default';
-      case 'low': return 'secondary';
-      default: return 'default';
+      if (error) throw error;
+      setUsers(data || []);
+    } catch (error: any) {
+      console.error('Error fetching users:', error);
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active': return 'default';
-      case 'completed': return 'secondary';
-      case 'closed': return 'outline';
-      case 'archived': return 'outline';
-      default: return 'default';
+  const filterCases = () => {
+    if (!searchQuery.trim()) {
+      setFilteredCases(cases);
+      return;
     }
+
+    const filtered = cases.filter(case_ => 
+      case_.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      case_.case_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      case_.description?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    setFilteredCases(filtered);
+  };
+
+  const handleAdvancedSearch = (filters: any) => {
+    let filtered = [...cases];
+
+    if (filters.query.trim()) {
+      filtered = filtered.filter(case_ => 
+        case_.title.toLowerCase().includes(filters.query.toLowerCase()) ||
+        case_.case_number.toLowerCase().includes(filters.query.toLowerCase()) ||
+        case_.description?.toLowerCase().includes(filters.query.toLowerCase())
+      );
+    }
+
+    if (filters.status) {
+      filtered = filtered.filter(case_ => case_.status === filters.status);
+    }
+
+    if (filters.priority) {
+      filtered = filtered.filter(case_ => case_.priority === filters.priority);
+    }
+
+    if (filters.assignedTo) {
+      filtered = filtered.filter(case_ => case_.assigned_to === filters.assignedTo);
+    }
+
+    if (filters.dateFrom) {
+      filtered = filtered.filter(case_ => 
+        new Date(case_.created_at) >= filters.dateFrom
+      );
+    }
+
+    if (filters.dateTo) {
+      filtered = filtered.filter(case_ => 
+        new Date(case_.created_at) <= filters.dateTo
+      );
+    }
+
+    setFilteredCases(filtered);
   };
 
   const updateCaseStatus = async (caseId: string, newStatus: string) => {
@@ -105,7 +191,37 @@ const Cases = () => {
     }
   };
 
-  if (loading) {
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'urgent': return 'destructive';
+      case 'high': return 'default';
+      case 'medium': return 'secondary';
+      case 'low': return 'outline';
+      default: return 'secondary';
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'active': return 'default';
+      case 'completed': return 'secondary';
+      case 'closed': return 'outline';
+      case 'archived': return 'outline';
+      default: return 'default';
+    }
+  };
+
+  const handleEditCase = (case_: Case) => {
+    setSelectedCase(case_);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleViewComments = (case_: Case) => {
+    setSelectedCase(case_);
+    setIsCommentsDialogOpen(true);
+  };
+
+  if (isLoading) {
     return (
       <div className="p-6">
         <div className="animate-pulse space-y-4">
@@ -123,27 +239,23 @@ const Cases = () => {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold">Case Management</h1>
-          <p className="text-muted-foreground">Manage and track investigation cases</p>
+          <h1 className="text-3xl font-bold text-foreground">Cases</h1>
+          <p className="text-muted-foreground">Manage investigation cases</p>
         </div>
-        <Button onClick={() => setCreateDialogOpen(true)}>
+        <Button onClick={() => setIsCreateDialogOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
-          New Case
+          Create Case
         </Button>
       </div>
 
-      <div className="flex items-center space-x-2">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search cases..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
+      <div className="mb-6">
+        <AdvancedSearch
+          type="cases"
+          onSearch={handleAdvancedSearch}
+          users={users}
+        />
       </div>
 
       <div className="grid gap-4">
@@ -154,68 +266,118 @@ const Cases = () => {
                 <FolderOpen className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold mb-2">No cases found</h3>
                 <p className="text-muted-foreground">
-                  {searchTerm ? 'No cases match your search criteria.' : 'Create your first case to get started.'}
+                  {searchQuery ? 'No cases match your search criteria.' : 'Create your first case to get started.'}
                 </p>
               </div>
             </CardContent>
           </Card>
         ) : (
           filteredCases.map((case_) => (
-            <Card key={case_.id} className="hover:shadow-md transition-shadow cursor-pointer">
+            <Card key={case_.id} className="hover:shadow-md transition-shadow">
               <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      {case_.case_number}
-                      <Badge variant={getPriorityColor(case_.priority)}>
-                        {case_.priority}
-                      </Badge>
-                      <Badge variant={getStatusColor(case_.status)}>
-                        {case_.status}
-                      </Badge>
-                    </CardTitle>
-                    <CardDescription className="mt-1">
-                      {case_.title}
-                    </CardDescription>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Badge variant={getStatusColor(case_.status)}>
+                      {case_.status}
+                    </Badge>
+                    <Badge variant={getPriorityColor(case_.priority)}>
+                      {case_.priority} priority
+                    </Badge>
                   </div>
-                  <Select value={case_.status} onValueChange={(value) => updateCaseStatus(case_.id, value)}>
-                    <SelectTrigger className="w-32">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
-                      <SelectItem value="closed">Closed</SelectItem>
-                      <SelectItem value="archived">Archived</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleViewComments(case_)}
+                    >
+                      <MessageSquare className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleEditCase(case_)}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Select value={case_.status} onValueChange={(value) => updateCaseStatus(case_.id, value)}>
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem value="closed">Closed</SelectItem>
+                        <SelectItem value="archived">Archived</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div>
+                  <CardTitle>{case_.case_number}</CardTitle>
+                  <CardDescription>{case_.title}</CardDescription>
                 </div>
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground mb-4">
-                  {case_.description}
+                  {case_.description || 'No description provided'}
                 </p>
-                <div className="flex justify-between items-center text-sm text-muted-foreground">
-                  <span>
-                    Lead: {case_.lead_investigator?.full_name || 'Unassigned'}
-                  </span>
-                  <span>
-                    Created: {new Date(case_.created_at).toLocaleDateString()}
-                  </span>
+                
+                <div className="grid grid-cols-2 gap-4 text-xs text-muted-foreground mb-4">
+                  <div className="flex items-center gap-1">
+                    <User className="h-3 w-3" />
+                    <span>
+                      Assigned: {case_.assigned_user?.full_name || 'Unassigned'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    <span>
+                      Due: {case_.due_date ? format(new Date(case_.due_date), 'MMM dd, yyyy') : 'No due date'}
+                    </span>
+                  </div>
+                </div>
+
+                {case_.findings && (
+                  <div className="mb-4">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Findings:</p>
+                    <p className="text-sm bg-muted p-2 rounded">{case_.findings}</p>
+                  </div>
+                )}
+
+                <div className="text-xs text-muted-foreground">
+                  Created: {new Date(case_.created_at).toLocaleDateString()} by {case_.creator?.full_name || 'Unknown'}
                 </div>
               </CardContent>
             </Card>
           ))
         )}
       </div>
-      
-      <CreateCaseDialog 
-        open={createDialogOpen}
-        onOpenChange={setCreateDialogOpen}
+
+      <CreateCaseDialog
+        open={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
         onCaseCreated={fetchCases}
       />
+
+      {selectedCase && (
+        <EditCaseDialog
+          case_={selectedCase}
+          open={isEditDialogOpen}
+          onOpenChange={setIsEditDialogOpen}
+          onUpdate={fetchCases}
+        />
+      )}
+
+      {selectedCase && (
+        <Dialog open={isCommentsDialogOpen} onOpenChange={setIsCommentsDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Case Comments - {selectedCase.case_number}</DialogTitle>
+            </DialogHeader>
+            <CommentsSection caseId={selectedCase.id} />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
-};
-
-export default Cases;
+}
