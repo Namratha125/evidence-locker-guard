@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Search, Plus, FolderOpen } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import CreateCaseDialog from '@/components/CreateCaseDialog';
@@ -73,9 +74,34 @@ const Cases = () => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active': return 'default';
-      case 'closed': return 'secondary';
+      case 'completed': return 'secondary';
+      case 'closed': return 'outline';
       case 'archived': return 'outline';
       default: return 'default';
+    }
+  };
+
+  const updateCaseStatus = async (caseId: string, newStatus: string) => {
+    try {
+      const { error } = await supabase
+        .from('cases')
+        .update({ status: newStatus })
+        .eq('id', caseId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Case status updated successfully",
+      });
+
+      fetchCases();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to update case status: " + error.message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -152,6 +178,17 @@ const Cases = () => {
                       {case_.title}
                     </CardDescription>
                   </div>
+                  <Select value={case_.status} onValueChange={(value) => updateCaseStatus(case_.id, value)}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="closed">Closed</SelectItem>
+                      <SelectItem value="archived">Archived</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </CardHeader>
               <CardContent>
