@@ -110,7 +110,7 @@ export default function EditCaseDialog({ case_, open, onOpenChange, onUpdate }: 
         due_date: formData.due_date?.toISOString() || null,
       };
 
-      if (formData.assigned_to) {
+      if (formData.assigned_to && formData.assigned_to !== 'unassigned') {
         updateData.assigned_to = formData.assigned_to;
       } else {
         updateData.assigned_to = null;
@@ -220,7 +220,7 @@ export default function EditCaseDialog({ case_, open, onOpenChange, onUpdate }: 
                   <SelectValue placeholder="Select user" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Unassigned</SelectItem>
+                  <SelectItem value="unassigned">Unassigned</SelectItem>
                   {users.map((user) => (
                     <SelectItem key={user.id} value={user.id}>
                       {user.full_name} ({user.role})

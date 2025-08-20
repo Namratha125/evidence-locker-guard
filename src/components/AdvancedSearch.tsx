@@ -27,9 +27,9 @@ interface AdvancedSearchProps {
 export default function AdvancedSearch({ onSearch, type, users = [] }: AdvancedSearchProps) {
   const [filters, setFilters] = useState<SearchFilters>({
     query: '',
-    status: '',
-    priority: '',
-    assignedTo: '',
+    status: 'all',
+    priority: 'all',
+    assignedTo: 'all',
     dateFrom: undefined,
     dateTo: undefined,
     type,
@@ -44,9 +44,9 @@ export default function AdvancedSearch({ onSearch, type, users = [] }: AdvancedS
   const clearFilters = () => {
     const clearedFilters = {
       query: '',
-      status: '',
-      priority: '',
-      assignedTo: '',
+      status: 'all',
+      priority: 'all',
+      assignedTo: 'all',
       dateFrom: undefined,
       dateTo: undefined,
       type,
@@ -55,7 +55,7 @@ export default function AdvancedSearch({ onSearch, type, users = [] }: AdvancedS
     onSearch(clearedFilters);
   };
 
-  const hasActiveFilters = filters.status || filters.priority || filters.assignedTo || filters.dateFrom || filters.dateTo;
+  const hasActiveFilters = (filters.status && filters.status !== 'all') || (filters.priority && filters.priority !== 'all') || (filters.assignedTo && filters.assignedTo !== 'all') || filters.dateFrom || filters.dateTo;
 
   return (
     <div className="space-y-4 p-4 border rounded-lg bg-card">
@@ -92,7 +92,7 @@ export default function AdvancedSearch({ onSearch, type, users = [] }: AdvancedS
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Statuses</SelectItem>
+              <SelectItem value="all">All Statuses</SelectItem>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
               <SelectItem value="closed">Closed</SelectItem>
@@ -113,7 +113,7 @@ export default function AdvancedSearch({ onSearch, type, users = [] }: AdvancedS
                 <SelectValue placeholder="Priority" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Priorities</SelectItem>
+                <SelectItem value="all">All Priorities</SelectItem>
                 <SelectItem value="low">Low</SelectItem>
                 <SelectItem value="medium">Medium</SelectItem>
                 <SelectItem value="high">High</SelectItem>
@@ -128,7 +128,7 @@ export default function AdvancedSearch({ onSearch, type, users = [] }: AdvancedS
                 <SelectValue placeholder="Assigned To" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Users</SelectItem>
+                <SelectItem value="all">All Users</SelectItem>
                 {users.map((user) => (
                   <SelectItem key={user.id} value={user.id}>
                     {user.full_name}
