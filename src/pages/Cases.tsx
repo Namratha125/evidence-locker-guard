@@ -53,8 +53,8 @@ export default function Cases() {
   }, []);
 
   useEffect(() => {
-    filterCases();
-  }, [cases, searchQuery]);
+    setFilteredCases(cases);
+  }, [cases]);
 
   const fetchCases = async () => {
     try {
