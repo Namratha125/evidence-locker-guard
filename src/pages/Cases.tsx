@@ -140,15 +140,15 @@ export default function Cases() {
       );
     }
 
-    if (filters.status) {
+    if (filters.status && filters.status !== 'all') {
       filtered = filtered.filter(case_ => case_.status === filters.status);
     }
 
-    if (filters.priority) {
+    if (filters.priority && filters.priority !== 'all') {
       filtered = filtered.filter(case_ => case_.priority === filters.priority);
     }
 
-    if (filters.assignedTo) {
+    if (filters.assignedTo && filters.assignedTo !== 'all') {
       filtered = filtered.filter(case_ => case_.assigned_to === filters.assignedTo);
     }
 
