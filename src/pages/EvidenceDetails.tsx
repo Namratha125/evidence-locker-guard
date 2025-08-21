@@ -72,24 +72,47 @@ const EvidenceDetails = () => {
     try {
       const { data, error } = await supabase
         .from('evidence')
-        .select(`
-          *,
-          case:cases!evidence_case_id_fkey(case_number, title),
-          uploader:profiles!evidence_uploaded_by_fkey(full_name),
-          tags:evidence_tags(tag:tags!evidence_tags_tag_id_fkey(id, name, color))
-        `)
+        .select('*')
         .eq('id', id)
         .single();
 
       if (error) throw error;
       
-      // Transform the tags data
-      const transformedData = {
-        ...data,
-        tags: data.tags?.map((t: any) => t.tag).filter(Boolean) || []
-      };
+      let evidenceWithRelations: any = data;
       
-      setEvidence(transformedData);
+      // Fetch related data separately if evidence exists
+      if (data) {
+        // Fetch case info
+        const { data: caseData } = await supabase
+          .from('cases')
+          .select('case_number, title')
+          .eq('id', data.case_id)
+          .single();
+        
+        // Fetch uploader profile
+        const { data: uploaderData } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', data.uploaded_by)
+          .single();
+        
+        // Fetch tags
+        const { data: tagsData } = await supabase
+          .from('evidence_tags')
+          .select(`
+            tag:tags(id, name, color)
+          `)
+          .eq('evidence_id', data.id);
+        
+        evidenceWithRelations = {
+          ...data,
+          case: caseData,
+          uploader: uploaderData,
+          tags: tagsData?.map((t: any) => t.tag).filter(Boolean) || []
+        };
+      }
+      
+      setEvidence(evidenceWithRelations);
       
       // Try to get file preview URL if it's an image
       if (data.file_path && data.file_type?.startsWith('image/')) {

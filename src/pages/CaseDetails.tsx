@@ -30,6 +30,7 @@ interface CaseData {
   status: string;
   priority: string;
   created_at: string;
+  updated_at: string;
   due_date?: string;
   findings?: string;
   created_by: string;
@@ -76,17 +77,36 @@ const CaseDetails = () => {
     try {
       const { data, error } = await supabase
         .from('cases')
-        .select(`
-          *,
-          creator:profiles!cases_created_by_fkey(full_name),
-          assignee:profiles!cases_assigned_to_fkey(full_name),
-          lead_investigator:profiles!cases_lead_investigator_id_fkey(full_name)
-        `)
+        .select('*')
         .eq('id', id)
         .maybeSingle();
 
       if (error) throw error;
-      setCaseData(data);
+      
+      let caseWithProfiles: any = data;
+      
+      // Fetch user profiles separately if case exists
+      if (data) {
+        const userIds = [data.created_by, data.assigned_to, data.lead_investigator_id].filter(Boolean);
+        
+        if (userIds.length > 0) {
+          const { data: profilesData } = await supabase
+            .from('profiles')
+            .select('id, full_name')
+            .in('id', userIds);
+
+          const profilesMap = new Map(profilesData?.map(p => [p.id, p]) || []);
+          
+          caseWithProfiles = {
+            ...data,
+            creator: profilesMap.get(data.created_by),
+            assignee: data.assigned_to ? profilesMap.get(data.assigned_to) : null,
+            lead_investigator: data.lead_investigator_id ? profilesMap.get(data.lead_investigator_id) : null
+          };
+        }
+      }
+
+      setCaseData(caseWithProfiles);
     } catch (error: any) {
       toast({
         title: "Error",
@@ -100,14 +120,35 @@ const CaseDetails = () => {
     try {
       const { data, error } = await supabase
         .from('evidence')
-        .select(`
-          *,
-          uploader:profiles!evidence_uploaded_by_fkey(full_name)
-        `)
+        .select('*')
         .eq('case_id', id);
 
       if (error) throw error;
-      setEvidence(data || []);
+      
+      // Fetch uploader profiles separately if evidence exists
+      if (data && data.length > 0) {
+        const uploaderIds = [...new Set(data.map(e => e.uploaded_by).filter(Boolean))];
+        
+        if (uploaderIds.length > 0) {
+          const { data: profilesData } = await supabase
+            .from('profiles')
+            .select('id, full_name')
+            .in('id', uploaderIds);
+
+          const profilesMap = new Map(profilesData?.map(p => [p.id, p]) || []);
+          
+          const evidenceWithProfiles = data.map((evidence: any) => ({
+            ...evidence,
+            uploader: profilesMap.get(evidence.uploaded_by)
+          }));
+          
+          setEvidence(evidenceWithProfiles);
+        } else {
+          setEvidence(data);
+        }
+      } else {
+        setEvidence([]);
+      }
     } catch (error: any) {
       toast({
         title: "Error",
