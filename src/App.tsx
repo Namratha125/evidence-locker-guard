@@ -8,7 +8,9 @@ import { Layout } from "@/components/Layout";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Cases from "./pages/Cases";
+import CaseDetails from "./pages/CaseDetails";
 import Evidence from "./pages/Evidence";
+import EvidenceDetails from "./pages/EvidenceDetails";
 import Tags from "./pages/Tags";
 import Audit from "./pages/Audit";
 import Users from "./pages/Users";
@@ -49,9 +51,19 @@ const App = () => (
                 <Layout><Cases /></Layout>
               </ProtectedRoute>
             } />
+            <Route path="/cases/:id" element={
+              <ProtectedRoute>
+                <Layout><CaseDetails /></Layout>
+              </ProtectedRoute>
+            } />
             <Route path="/evidence" element={
               <ProtectedRoute>
                 <Layout><Evidence /></Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/evidence/:id" element={
+              <ProtectedRoute>
+                <Layout><EvidenceDetails /></Layout>
               </ProtectedRoute>
             } />
             <Route path="/tags" element={
