@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Search, Plus, Tag, Edit, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { createAuditLog } from '@/utils/audit';
 import CreateTagDialog from '@/components/CreateTagDialog';
 import EditTagDialog from '@/components/EditTagDialog';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -70,6 +71,14 @@ const Tags = () => {
         .eq('id', tagId);
 
       if (error) throw error;
+
+      // Create audit log
+      await createAuditLog({
+        action: 'delete',
+        resource_type: 'tag',
+        resource_id: tagId,
+        details: { tag_name: tags.find(t => t.id === tagId)?.name }
+      });
 
       toast({
         title: "Success",

@@ -7,6 +7,8 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { createAuditLog } from '@/utils/audit';
+import EvidenceTagSelector from '@/components/EvidenceTagSelector';
 import { 
   ArrowLeft, 
   Download, 
@@ -61,6 +63,7 @@ const EvidenceDetails = () => {
   const [loading, setLoading] = useState(true);
   const [custodyDialogOpen, setCustodyDialogOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string>('');
+  const [evidenceTags, setEvidenceTags] = useState<any[]>([]);
 
   useEffect(() => {
     if (id) {
@@ -113,6 +116,7 @@ const EvidenceDetails = () => {
       }
       
       setEvidence(evidenceWithRelations);
+      setEvidenceTags(evidenceWithRelations.tags || []);
       
       // Try to get file preview URL if it's an image
       if (data.file_path && data.file_type?.startsWith('image/')) {
@@ -315,16 +319,19 @@ const EvidenceDetails = () => {
                 <Badge variant={getStatusColor(evidence.status)}>
                   {evidence.status}
                 </Badge>
-                {evidence.tags?.map((tag) => (
-                  <Badge 
-                    key={tag.id} 
-                    variant="outline"
-                    style={{ borderColor: tag.color, color: tag.color }}
-                  >
-                    {tag.name}
-                  </Badge>
-                ))}
               </div>
+
+              {/* Tags Section */}
+              <div className="space-y-2">
+                <h4 className="font-medium">Tags</h4>
+                <EvidenceTagSelector 
+                  evidenceId={evidence.id}
+                  selectedTags={evidenceTags}
+                  onTagsChange={setEvidenceTags}
+                />
+              </div>
+              
+              <Separator />
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-3">

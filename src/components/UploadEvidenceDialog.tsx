@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Upload } from 'lucide-react';
+import { createAuditLog } from '@/utils/audit';
 
 interface UploadEvidenceDialogProps {
   open: boolean;
@@ -118,6 +119,14 @@ const UploadEvidenceDialog = ({ open, onOpenChange, onEvidenceUploaded }: Upload
         });
 
       if (insertError) throw insertError;
+
+      // Create audit log
+      await createAuditLog({
+        action: 'create',
+        resource_type: 'evidence',
+        resource_id: formData.caseId,
+        details: { title: formData.title, file_name: file.name }
+      });
 
       toast({
         title: "Success",
