@@ -7,6 +7,8 @@ import { Search, Plus, Tag, Edit, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import CreateTagDialog from '@/components/CreateTagDialog';
+import EditTagDialog from '@/components/EditTagDialog';
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
 interface TagItem {
   id: string;
@@ -24,6 +26,8 @@ const Tags = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [selectedTag, setSelectedTag] = useState<TagItem | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -50,6 +54,35 @@ const Tags = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleEditTag = (tag: TagItem) => {
+    setSelectedTag(tag);
+    setEditDialogOpen(true);
+  };
+
+  const handleDeleteTag = async (tagId: string) => {
+    try {
+      const { error } = await supabase
+        .from('tags')
+        .delete()
+        .eq('id', tagId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Tag deleted successfully",
+      });
+
+      fetchTags();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to delete tag: " + error.message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -126,12 +159,30 @@ const Tags = () => {
                     {tag.name}
                   </CardTitle>
                   <div className="flex gap-1">
-                    <Button size="sm" variant="ghost">
+                    <Button size="sm" variant="ghost" onClick={() => handleEditTag(tag)}>
                       <Edit className="h-4 w-4" />
                     </Button>
-                    <Button size="sm" variant="ghost">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button size="sm" variant="ghost">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete Tag</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to delete this tag? This action cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => handleDeleteTag(tag.id)}>
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                 </div>
               </CardHeader>
@@ -160,6 +211,13 @@ const Tags = () => {
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
         onTagCreated={fetchTags}
+      />
+      
+      <EditTagDialog
+        tag={selectedTag}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        onTagUpdated={fetchTags}
       />
     </div>
   );
