@@ -27,13 +27,15 @@ const CreateTagDialog = ({ open, onOpenChange, onTagCreated }: CreateTagDialogPr
 
     setLoading(true);
     try {
-      const { error } = await supabase
+      const { error, data: tagData } = await supabase
         .from('tags')
         .insert({
           name,
           color,
           created_by: user.id
-        });
+        })
+        .select('id')
+        .single();
 
       if (error) throw error;
 
@@ -41,7 +43,7 @@ const CreateTagDialog = ({ open, onOpenChange, onTagCreated }: CreateTagDialogPr
       await createAuditLog({
         action: 'create',
         resource_type: 'tag',
-        resource_id: name,
+        resource_id: tagData.id,
         details: { tag_name: name, color }
       });
 

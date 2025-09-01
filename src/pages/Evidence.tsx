@@ -136,6 +136,7 @@ const Evidence = () => {
         description: "File downloaded successfully",
       });
     } catch (error: any) {
+      console.error('Download error:', error);
       toast({
         title: "Error",
         description: "Failed to download file: " + error.message,

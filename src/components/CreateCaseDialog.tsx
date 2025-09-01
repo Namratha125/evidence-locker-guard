@@ -34,7 +34,7 @@ const CreateCaseDialog = ({ open, onOpenChange, onCaseCreated }: CreateCaseDialo
 
     setLoading(true);
     try {
-      const { error } = await supabase
+      const { error, data: caseData } = await supabase
         .from('cases')
         .insert({
           case_number: formData.caseNumber,
@@ -43,7 +43,9 @@ const CreateCaseDialog = ({ open, onOpenChange, onCaseCreated }: CreateCaseDialo
           priority: formData.priority,
           status: formData.status,
           created_by: user.id
-        });
+        })
+        .select('id')
+        .single();
 
       if (error) throw error;
 
@@ -51,7 +53,7 @@ const CreateCaseDialog = ({ open, onOpenChange, onCaseCreated }: CreateCaseDialo
       await createAuditLog({
         action: 'create',
         resource_type: 'case',
-        resource_id: formData.caseNumber,
+        resource_id: caseData.id,
         details: { case_number: formData.caseNumber, title: formData.title }
       });
 

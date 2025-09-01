@@ -40,14 +40,16 @@ const Audit = () => {
         .from('audit_logs')
         .select(`
           *,
-          user:profiles(full_name, username)
+          user:profiles!audit_logs_user_id_fkey(full_name, username)
         `)
         .order('timestamp', { ascending: false })
         .limit(100);
 
       if (error) throw error;
+      console.log('Fetched audit logs:', data);
       setAuditLogs(data || []);
     } catch (error: any) {
+      console.error('Audit log fetch error:', error);
       toast({
         title: "Error",
         description: "Failed to fetch audit logs: " + error.message,
