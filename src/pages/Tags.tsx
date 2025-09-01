@@ -37,7 +37,7 @@ const Tags = () => {
 
   const fetchTags = async () => {
     try {
-      const { data, error } = await supabase
+      const { data: tagsData, error } = await supabase
         .from('tags')
         .select(`
           *,
@@ -46,7 +46,23 @@ const Tags = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setTags(data || []);
+
+      // Get evidence count for each tag
+      const tagsWithCount = await Promise.all(
+        (tagsData || []).map(async (tag) => {
+          const { count } = await supabase
+            .from('evidence_tags')
+            .select('*', { count: 'exact', head: true })
+            .eq('tag_id', tag.id);
+          
+          return {
+            ...tag,
+            evidence_count: count || 0
+          };
+        })
+      );
+
+      setTags(tagsWithCount);
     } catch (error: any) {
       toast({
         title: "Error",

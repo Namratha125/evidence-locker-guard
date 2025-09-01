@@ -12,6 +12,7 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { createAuditLog } from '@/utils/audit';
 
 interface Case {
   id: string;
@@ -122,6 +123,14 @@ export default function EditCaseDialog({ case_, open, onOpenChange, onUpdate }: 
         .eq('id', case_.id);
 
       if (error) throw error;
+
+      // Create audit log
+      await createAuditLog({
+        action: 'update',
+        resource_type: 'case',
+        resource_id: case_.id,
+        details: { case_number: formData.case_number, changes: updateData }
+      });
 
       toast({
         title: "Success",

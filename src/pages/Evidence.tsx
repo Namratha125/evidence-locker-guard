@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Search, Plus, FileText, Download, Eye, Link2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { createAuditLog } from '@/utils/audit';
 import UploadEvidenceDialog from '@/components/UploadEvidenceDialog';
 import ChainOfCustodyDialog from '@/components/ChainOfCustodyDialog';
 
@@ -15,6 +16,7 @@ interface Evidence {
   title: string;
   description: string;
   file_name: string;
+  file_path: string;
   file_type: string;
   file_size: number;
   status: string;
@@ -92,6 +94,54 @@ const Evidence = () => {
 
   const getFileTypeIcon = (fileType: string) => {
     return <FileText className="h-4 w-4" />;
+  };
+
+  const handleDownload = async (evidence: Evidence) => {
+    try {
+      if (!evidence.file_path) {
+        toast({
+          title: "Error",
+          description: "File path not found for this evidence",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { data, error } = await supabase.storage
+        .from('evidence-files')
+        .download(evidence.file_path);
+
+      if (error) throw error;
+
+      // Create audit log
+      await createAuditLog({
+        action: 'download',
+        resource_type: 'evidence',
+        resource_id: evidence.id,
+        details: { file_name: evidence.file_name }
+      });
+
+      // Create download link
+      const url = URL.createObjectURL(data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = evidence.file_name || 'evidence-file';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "Success",
+        description: "File downloaded successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to download file: " + error.message,
+        variant: "destructive",
+      });
+    }
   };
 
   if (loading) {
@@ -183,7 +233,11 @@ const Evidence = () => {
                     >
                       <Eye className="h-4 w-4" />
                     </Button>
-                    <Button size="sm" variant="outline">
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => handleDownload(item)}
+                    >
                       <Download className="h-4 w-4" />
                     </Button>
                   </div>

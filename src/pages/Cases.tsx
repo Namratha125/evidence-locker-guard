@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import { createAuditLog } from '@/utils/audit';
 import CreateCaseDialog from '@/components/CreateCaseDialog';
 import EditCaseDialog from '@/components/EditCaseDialog';
 import CommentsSection from '@/components/CommentsSection';
@@ -177,6 +178,14 @@ export default function Cases() {
         .eq('id', caseId);
 
       if (error) throw error;
+
+      // Create audit log
+      await createAuditLog({
+        action: 'update_status',
+        resource_type: 'case',
+        resource_id: caseId,
+        details: { new_status: newStatus }
+      });
 
       toast({
         title: "Success",

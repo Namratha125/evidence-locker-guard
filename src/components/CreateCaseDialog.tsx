@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { createAuditLog } from '@/utils/audit';
 
 interface CreateCaseDialogProps {
   open: boolean;
@@ -45,6 +46,14 @@ const CreateCaseDialog = ({ open, onOpenChange, onCaseCreated }: CreateCaseDialo
         });
 
       if (error) throw error;
+
+      // Create audit log
+      await createAuditLog({
+        action: 'create',
+        resource_type: 'case',
+        resource_id: formData.caseNumber,
+        details: { case_number: formData.caseNumber, title: formData.title }
+      });
 
       toast({
         title: "Success",

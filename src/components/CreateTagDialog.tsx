@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+import { createAuditLog } from '@/utils/audit';
 
 interface CreateTagDialogProps {
   open: boolean;
@@ -35,6 +36,14 @@ const CreateTagDialog = ({ open, onOpenChange, onTagCreated }: CreateTagDialogPr
         });
 
       if (error) throw error;
+
+      // Create audit log
+      await createAuditLog({
+        action: 'create',
+        resource_type: 'tag',
+        resource_id: name,
+        details: { tag_name: name, color }
+      });
 
       toast({
         title: "Success",
