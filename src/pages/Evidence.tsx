@@ -28,6 +28,13 @@ interface Evidence {
   uploaded_by: {
     full_name: string;
   };
+  evidence_tags: {
+    tag: {
+      id: string;
+      name: string;
+      color: string;
+    };
+  }[];
 }
 
 const Evidence = () => {
@@ -51,7 +58,10 @@ const Evidence = () => {
         .select(`
           *,
           case:cases(case_number, title),
-          uploaded_by:profiles(full_name)
+          uploaded_by:profiles(full_name),
+          evidence_tags(
+            tag:tags(id, name, color)
+          )
         `)
         .order('created_at', { ascending: false });
 
@@ -215,6 +225,24 @@ const Evidence = () => {
                     <CardDescription className="mt-1">
                       Case: {item.case?.case_number} - {item.case?.title}
                     </CardDescription>
+                    {item.evidence_tags && item.evidence_tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {item.evidence_tags.map(({ tag }) => (
+                          <Badge
+                            key={tag.id}
+                            variant="outline"
+                            className="text-xs"
+                            style={{ 
+                              backgroundColor: `${tag.color}20`,
+                              borderColor: tag.color,
+                              color: tag.color
+                            }}
+                          >
+                            {tag.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="flex gap-2">
                     <Button 
