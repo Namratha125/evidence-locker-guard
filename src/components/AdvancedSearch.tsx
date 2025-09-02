@@ -16,15 +16,19 @@ interface SearchFilters {
   dateFrom: Date | undefined;
   dateTo: Date | undefined;
   type: 'cases' | 'evidence';
+  caseId?: string;
+  tagId?: string;
 }
 
 interface AdvancedSearchProps {
   onSearch: (filters: SearchFilters) => void;
   type: 'cases' | 'evidence';
   users?: Array<{ id: string; full_name: string }>;
+  cases?: Array<{ id: string; case_number: string; title: string }>;
+  tags?: Array<{ id: string; name: string; color: string }>;
 }
 
-export default function AdvancedSearch({ onSearch, type, users = [] }: AdvancedSearchProps) {
+export default function AdvancedSearch({ onSearch, type, users = [], cases = [], tags = [] }: AdvancedSearchProps) {
   const [filters, setFilters] = useState<SearchFilters>({
     query: '',
     status: 'all',
@@ -33,6 +37,8 @@ export default function AdvancedSearch({ onSearch, type, users = [] }: AdvancedS
     dateFrom: undefined,
     dateTo: undefined,
     type,
+    caseId: 'all',
+    tagId: 'all',
   });
 
   const [isExpanded, setIsExpanded] = useState(false);
@@ -50,12 +56,14 @@ export default function AdvancedSearch({ onSearch, type, users = [] }: AdvancedS
       dateFrom: undefined,
       dateTo: undefined,
       type,
+      caseId: 'all',
+      tagId: 'all',
     };
     setFilters(clearedFilters);
     onSearch(clearedFilters);
   };
 
-  const hasActiveFilters = (filters.status && filters.status !== 'all') || (filters.priority && filters.priority !== 'all') || (filters.assignedTo && filters.assignedTo !== 'all') || filters.dateFrom || filters.dateTo;
+  const hasActiveFilters = (filters.status && filters.status !== 'all') || (filters.priority && filters.priority !== 'all') || (filters.assignedTo && filters.assignedTo !== 'all') || (filters.caseId && filters.caseId !== 'all') || (filters.tagId && filters.tagId !== 'all') || filters.dateFrom || filters.dateTo;
 
   return (
     <div className="space-y-4 p-4 border rounded-lg bg-card">
@@ -93,15 +101,19 @@ export default function AdvancedSearch({ onSearch, type, users = [] }: AdvancedS
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
-              <SelectItem value="closed">Closed</SelectItem>
-              <SelectItem value="archived">Archived</SelectItem>
+              {type === 'cases' && (
+                <>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="closed">Closed</SelectItem>
+                  <SelectItem value="archived">Archived</SelectItem>
+                </>
+              )}
               {type === 'evidence' && (
                 <>
                   <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="analyzed">Analyzed</SelectItem>
-                  <SelectItem value="returned">Returned</SelectItem>
+                  <SelectItem value="verified">Verified</SelectItem>
+                  <SelectItem value="archived">Archived</SelectItem>
                 </>
               )}
             </SelectContent>
@@ -132,6 +144,44 @@ export default function AdvancedSearch({ onSearch, type, users = [] }: AdvancedS
                 {users.map((user) => (
                   <SelectItem key={user.id} value={user.id}>
                     {user.full_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {type === 'evidence' && cases.length > 0 && (
+            <Select value={filters.caseId || 'all'} onValueChange={(value) => setFilters({ ...filters, caseId: value })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Case" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Cases</SelectItem>
+                {cases.map((case_) => (
+                  <SelectItem key={case_.id} value={case_.id}>
+                    {case_.case_number} - {case_.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {type === 'evidence' && tags.length > 0 && (
+            <Select value={filters.tagId || 'all'} onValueChange={(value) => setFilters({ ...filters, tagId: value })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Tag" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Tags</SelectItem>
+                {tags.map((tag) => (
+                  <SelectItem key={tag.id} value={tag.id}>
+                    <div className="flex items-center gap-2">
+                      <div 
+                        className="w-3 h-3 rounded-full" 
+                        style={{ backgroundColor: tag.color }}
+                      />
+                      {tag.name}
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>

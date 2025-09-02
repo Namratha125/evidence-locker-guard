@@ -11,9 +11,11 @@ import { useToast } from '@/hooks/use-toast';
 import { createAuditLog } from '@/utils/audit';
 import UploadEvidenceDialog from '@/components/UploadEvidenceDialog';
 import ChainOfCustodyDialog from '@/components/ChainOfCustodyDialog';
+import AdvancedSearch from '@/components/AdvancedSearch';
 
 interface Evidence {
   id: string;
+  case_id: string;
   title: string;
   description: string;
   file_name: string;
@@ -41,16 +43,25 @@ interface Evidence {
 const Evidence = () => {
   const navigate = useNavigate();
   const [evidence, setEvidence] = useState<Evidence[]>([]);
+  const [filteredEvidence, setFilteredEvidence] = useState<Evidence[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [custodyDialogOpen, setCustodyDialogOpen] = useState(false);
   const [selectedEvidenceId, setSelectedEvidenceId] = useState('');
+  const [cases, setCases] = useState<Array<{ id: string; case_number: string; title: string }>>([]);
+  const [tags, setTags] = useState<Array<{ id: string; name: string; color: string }>>([]);
   const { toast } = useToast();
 
   useEffect(() => {
     fetchEvidence();
+    fetchCases();
+    fetchTags();
   }, []);
+
+  useEffect(() => {
+    setFilteredEvidence(evidence);
+  }, [evidence]);
 
   const fetchEvidence = async () => {
     try {
@@ -79,12 +90,74 @@ const Evidence = () => {
     }
   };
 
-  const filteredEvidence = evidence.filter(e =>
-    e.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    e.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    e.file_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    e.case?.case_number.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const fetchCases = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('cases')
+        .select('id, case_number, title')
+        .order('case_number');
+
+      if (error) throw error;
+      setCases(data || []);
+    } catch (error: any) {
+      console.error('Error fetching cases:', error);
+    }
+  };
+
+  const fetchTags = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('tags')
+        .select('id, name, color')
+        .order('name');
+
+      if (error) throw error;
+      setTags(data || []);
+    } catch (error: any) {
+      console.error('Error fetching tags:', error);
+    }
+  };
+
+  const handleAdvancedSearch = (filters: any) => {
+    let filtered = [...evidence];
+
+    if (filters.query.trim()) {
+      filtered = filtered.filter(e =>
+        e.title.toLowerCase().includes(filters.query.toLowerCase()) ||
+        e.description?.toLowerCase().includes(filters.query.toLowerCase()) ||
+        e.file_name?.toLowerCase().includes(filters.query.toLowerCase()) ||
+        e.case?.case_number.toLowerCase().includes(filters.query.toLowerCase())
+      );
+    }
+
+    if (filters.status && filters.status !== 'all') {
+      filtered = filtered.filter(e => e.status === filters.status);
+    }
+
+    if (filters.caseId && filters.caseId !== 'all') {
+      filtered = filtered.filter(e => e.case_id === filters.caseId);
+    }
+
+    if (filters.tagId && filters.tagId !== 'all') {
+      filtered = filtered.filter(e => 
+        e.evidence_tags.some(et => et.tag.id === filters.tagId)
+      );
+    }
+
+    if (filters.dateFrom) {
+      filtered = filtered.filter(e => 
+        new Date(e.created_at) >= filters.dateFrom
+      );
+    }
+
+    if (filters.dateTo) {
+      filtered = filtered.filter(e => 
+        new Date(e.created_at) <= filters.dateTo
+      );
+    }
+
+    setFilteredEvidence(filtered);
+  };
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
@@ -217,16 +290,13 @@ const Evidence = () => {
         </Button>
       </div>
 
-      <div className="flex items-center space-x-2">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search evidence..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
+      <div className="mb-6">
+        <AdvancedSearch
+          type="evidence"
+          onSearch={handleAdvancedSearch}
+          cases={cases}
+          tags={tags}
+        />
       </div>
 
       <div className="grid gap-4">
@@ -236,9 +306,9 @@ const Evidence = () => {
               <div className="text-center">
                 <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold mb-2">No evidence found</h3>
-                <p className="text-muted-foreground">
-                  {searchTerm ? 'No evidence matches your search criteria.' : 'Upload your first piece of evidence to get started.'}
-                </p>
+                 <p className="text-muted-foreground">
+                   No evidence matches your search criteria.
+                 </p>
               </div>
             </CardContent>
           </Card>
