@@ -205,10 +205,41 @@ export default function Cases() {
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'urgent': return 'destructive';
-      case 'high': return 'default';
-      case 'medium': return 'secondary';
-      case 'low': return 'outline';
+      case 'high': return 'destructive';
+      case 'medium': return 'default';
+      case 'low': return 'secondary';
       default: return 'secondary';
+    }
+  };
+
+  const getPriorityStyle = (priority: string) => {
+    switch (priority) {
+      case 'urgent': 
+        return { 
+          backgroundColor: '#fee2e2', 
+          borderColor: '#dc2626', 
+          color: '#dc2626' 
+        };
+      case 'high': 
+        return { 
+          backgroundColor: '#fef3c7', 
+          borderColor: '#d97706', 
+          color: '#d97706' 
+        };
+      case 'medium': 
+        return { 
+          backgroundColor: '#dbeafe', 
+          borderColor: '#2563eb', 
+          color: '#2563eb' 
+        };
+      case 'low': 
+        return { 
+          backgroundColor: '#dcfce7', 
+          borderColor: '#16a34a', 
+          color: '#16a34a' 
+        };
+      default: 
+        return {};
     }
   };
 
@@ -291,7 +322,10 @@ export default function Cases() {
                     <Badge variant={getStatusColor(case_.status)}>
                       {case_.status}
                     </Badge>
-                    <Badge variant={getPriorityColor(case_.priority)}>
+                    <Badge 
+                      variant="outline"
+                      style={getPriorityStyle(case_.priority)}
+                    >
                       {case_.priority} priority
                     </Badge>
                   </div>

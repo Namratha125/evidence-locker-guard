@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Search, Plus, FileText, Download, Eye, Link2 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { createAuditLog } from '@/utils/audit';
@@ -99,6 +100,38 @@ const Evidence = () => {
       case 'pending': return 'secondary';
       case 'archived': return 'outline';
       default: return 'default';
+    }
+  };
+
+  const updateEvidenceStatus = async (evidenceId: string, newStatus: string) => {
+    try {
+      const { error } = await supabase
+        .from('evidence')
+        .update({ status: newStatus as 'pending' | 'verified' | 'archived' })
+        .eq('id', evidenceId);
+
+      if (error) throw error;
+
+      // Create audit log
+      await createAuditLog({
+        action: 'update_status',
+        resource_type: 'evidence',
+        resource_id: evidenceId,
+        details: { new_status: newStatus }
+      });
+
+      toast({
+        title: "Success",
+        description: "Evidence status updated successfully",
+      });
+
+      fetchEvidence();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to update evidence status: " + error.message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -245,6 +278,16 @@ const Evidence = () => {
                     )}
                   </div>
                   <div className="flex gap-2">
+                    <Select value={item.status} onValueChange={(value) => updateEvidenceStatus(item.id, value)}>
+                      <SelectTrigger className="w-28">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="verified">Verified</SelectItem>
+                        <SelectItem value="archived">Archived</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <Button 
                       size="sm" 
                       variant="outline"
