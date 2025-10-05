@@ -6,9 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Search, Plus, FileText, Download, Eye, Link2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { createAuditLog } from '@/utils/audit';
 import UploadEvidenceDialog from '@/components/UploadEvidenceDialog';
 import ChainOfCustodyDialog from '@/components/ChainOfCustodyDialog';
 import AdvancedSearch from '@/components/AdvancedSearch';
