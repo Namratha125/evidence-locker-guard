@@ -22,19 +22,17 @@ interface Evidence {
   file_size: number;
   status: string;
   created_at: string;
-  case: {
+  case?: {
     case_number: string;
     title: string;
   };
-  uploaded_by: {
+  uploaded_by?: {
     full_name: string;
   };
-  evidence_tags: {
-    tag: {
-      id: string;
-      name: string;
-      color: string;
-    };
+  tags?: {
+    id: string;
+    name: string;
+    color: string;
   }[];
 }
 
@@ -61,21 +59,12 @@ const Evidence = () => {
     setFilteredEvidence(evidence);
   }, [evidence]);
 
+  // ✅ Fetch all evidence from MySQL
   const fetchEvidence = async () => {
     try {
-      const { data, error } = await supabase
-        .from('evidence')
-        .select(`
-          *,
-          case:cases(case_number, title),
-          uploaded_by:profiles(full_name),
-          evidence_tags(
-            tag:tags(id, name, color)
-          )
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const res = await fetch('http://localhost:5000/evidence');
+      if (!res.ok) throw new Error('Failed to fetch evidence');
+      const data = await res.json();
       setEvidence(data || []);
     } catch (error: any) {
       toast({
@@ -88,30 +77,26 @@ const Evidence = () => {
     }
   };
 
+  // ✅ Fetch cases for filters
   const fetchCases = async () => {
     try {
-      const { data, error } = await supabase
-        .from('cases')
-        .select('id, case_number, title')
-        .order('case_number');
-
-      if (error) throw error;
+      const res = await fetch('http://localhost:5000/cases');
+      if (!res.ok) throw new Error('Failed to fetch cases');
+      const data = await res.json();
       setCases(data || []);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error fetching cases:', error);
     }
   };
 
+  // ✅ Fetch tags for filters
   const fetchTags = async () => {
     try {
-      const { data, error } = await supabase
-        .from('tags')
-        .select('id, name, color')
-        .order('name');
-
-      if (error) throw error;
+      const res = await fetch('http://localhost:5000/tags');
+      if (!res.ok) throw new Error('Failed to fetch tags');
+      const data = await res.json();
       setTags(data || []);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error fetching tags:', error);
     }
   };
@@ -138,20 +123,16 @@ const Evidence = () => {
 
     if (filters.tagId && filters.tagId !== 'all') {
       filtered = filtered.filter(e => 
-        e.evidence_tags.some(et => et.tag.id === filters.tagId)
+        e.tags?.some(t => t.id === filters.tagId)
       );
     }
 
     if (filters.dateFrom) {
-      filtered = filtered.filter(e => 
-        new Date(e.created_at) >= filters.dateFrom
-      );
+      filtered = filtered.filter(e => new Date(e.created_at) >= filters.dateFrom);
     }
 
     if (filters.dateTo) {
-      filtered = filtered.filter(e => 
-        new Date(e.created_at) <= filters.dateTo
-      );
+      filtered = filtered.filter(e => new Date(e.created_at) <= filters.dateTo);
     }
 
     setFilteredEvidence(filtered);
@@ -174,22 +155,16 @@ const Evidence = () => {
     }
   };
 
+  // ✅ Update evidence status (PUT)
   const updateEvidenceStatus = async (evidenceId: string, newStatus: string) => {
     try {
-      const { error } = await supabase
-        .from('evidence')
-        .update({ status: newStatus as 'pending' | 'verified' | 'archived' })
-        .eq('id', evidenceId);
-
-      if (error) throw error;
-
-      // Create audit log
-      await createAuditLog({
-        action: 'update_status',
-        resource_type: 'evidence',
-        resource_id: evidenceId,
-        details: { new_status: newStatus }
+      const res = await fetch(`http://localhost:5000/evidence/${evidenceId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
       });
+
+      if (!res.ok) throw new Error('Failed to update status');
 
       toast({
         title: "Success",
@@ -206,57 +181,21 @@ const Evidence = () => {
     }
   };
 
-  const getFileTypeIcon = (fileType: string) => {
-    return <FileText className="h-4 w-4" />;
-  };
+  const getFileTypeIcon = (fileType: string) => <FileText className="h-4 w-4" />;
 
-  const handleDownload = async (evidence: Evidence) => {
-    try {
-      if (!evidence.file_path) {
-        toast({
-          title: "Error",
-          description: "File path not found for this evidence",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const { data, error } = await supabase.storage
-        .from('evidence-files')
-        .download(evidence.file_path);
-
-      if (error) throw error;
-
-      // Create audit log
-      await createAuditLog({
-        action: 'download',
-        resource_type: 'evidence',
-        resource_id: evidence.id,
-        details: { file_name: evidence.file_name }
-      });
-
-      // Create download link
-      const url = URL.createObjectURL(data);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = evidence.file_name || 'evidence-file';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-      toast({
-        title: "Success",
-        description: "File downloaded successfully",
-      });
-    } catch (error: any) {
-      console.error('Download error:', error);
+  // ✅ Download (handled by backend serving file URLs)
+  const handleDownload = async (item: Evidence) => {
+    if (!item.file_path) {
       toast({
         title: "Error",
-        description: "Failed to download file: " + error.message,
+        description: "File not found for this evidence",
         variant: "destructive",
       });
+      return;
     }
+
+    // Example if your backend serves /uploads/files/
+    window.open(`http://localhost:5000/uploads/${item.file_path}`, '_blank');
   };
 
   if (loading) {
@@ -280,7 +219,9 @@ const Evidence = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold">Evidence Management</h1>
-          <p className="text-muted-foreground">Upload, manage, and track digital evidence</p>
+          <p className="text-muted-foreground">
+            Upload, manage, and track digital evidence
+          </p>
         </div>
         <Button onClick={() => setUploadDialogOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
@@ -304,9 +245,9 @@ const Evidence = () => {
               <div className="text-center">
                 <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold mb-2">No evidence found</h3>
-                 <p className="text-muted-foreground">
-                   No evidence matches your search criteria.
-                 </p>
+                <p className="text-muted-foreground">
+                  No evidence matches your search criteria.
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -326,9 +267,9 @@ const Evidence = () => {
                     <CardDescription className="mt-1">
                       Case: {item.case?.case_number} - {item.case?.title}
                     </CardDescription>
-                    {item.evidence_tags && item.evidence_tags.length > 0 && (
+                    {item.tags && item.tags.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-2">
-                        {item.evidence_tags.map(({ tag }) => (
+                        {item.tags.map((tag) => (
                           <Badge
                             key={tag.id}
                             variant="outline"
@@ -346,7 +287,10 @@ const Evidence = () => {
                     )}
                   </div>
                   <div className="flex gap-2">
-                    <Select value={item.status} onValueChange={(value) => updateEvidenceStatus(item.id, value)}>
+                    <Select
+                      value={item.status}
+                      onValueChange={(value) => updateEvidenceStatus(item.id, value)}
+                    >
                       <SelectTrigger className="w-28">
                         <SelectValue />
                       </SelectTrigger>
@@ -356,8 +300,8 @@ const Evidence = () => {
                         <SelectItem value="archived">Archived</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Button 
-                      size="sm" 
+                    <Button
+                      size="sm"
                       variant="outline"
                       onClick={() => {
                         setSelectedEvidenceId(item.id);
@@ -366,15 +310,15 @@ const Evidence = () => {
                     >
                       <Link2 className="h-4 w-4" />
                     </Button>
-                    <Button 
-                      size="sm" 
+                    <Button
+                      size="sm"
                       variant="outline"
                       onClick={() => navigate(`/evidence/${item.id}`)}
                     >
                       <Eye className="h-4 w-4" />
                     </Button>
-                    <Button 
-                      size="sm" 
+                    <Button
+                      size="sm"
                       variant="outline"
                       onClick={() => handleDownload(item)}
                     >
@@ -403,13 +347,13 @@ const Evidence = () => {
           ))
         )}
       </div>
-      
-      <UploadEvidenceDialog 
+
+      <UploadEvidenceDialog
         open={uploadDialogOpen}
         onOpenChange={setUploadDialogOpen}
         onEvidenceUploaded={fetchEvidence}
       />
-      
+
       <ChainOfCustodyDialog
         open={custodyDialogOpen}
         onOpenChange={setCustodyDialogOpen}

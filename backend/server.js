@@ -34,6 +34,31 @@ try {
 // ✅ ROUTES
 // ---------------------------------------
 
+// GET all evidence
+app.get("/evidence", async (req, res) => {
+  const [rows] = await db.query(`
+    SELECT e.*, 
+           c.case_number, c.title AS case_title,
+           p.full_name AS uploaded_by_name
+    FROM evidence e
+    LEFT JOIN cases c ON e.case_id = c.id
+    LEFT JOIN profiles p ON e.uploaded_by = p.id
+    ORDER BY e.created_at DESC
+  `);
+  res.json(rows.map(r => ({
+    ...r,
+    case: { case_number: r.case_number, title: r.case_title },
+    uploaded_by: { full_name: r.uploaded_by_name }
+  })));
+});
+
+// PUT update evidence status
+app.put("/evidence/:id/status", async (req, res) => {
+  const { status } = req.body;
+  await db.query("UPDATE evidence SET status = ? WHERE id = ?", [status, req.params.id]);
+  res.json({ message: "Status updated" });
+});
+
 // 🔹 Get all evidence
 app.get("/evidence", async (req, res) => {
   try {
