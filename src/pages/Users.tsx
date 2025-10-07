@@ -33,14 +33,12 @@ const Users = () => {
     fetchUsers();
   }, []);
 
+  // ✅ Fetch users from MySQL backend
   const fetchUsers = async () => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const response = await fetch('http://localhost:5000/profiles');
+      if (!response.ok) throw new Error('Failed to fetch users');
+      const data = await response.json();
       setUsers(data || []);
     } catch (error: any) {
       toast({
@@ -53,29 +51,34 @@ const Users = () => {
     }
   };
 
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = 
+  const filteredUsers = users.filter((user) => {
+    const matchesSearch =
       user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.badge_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.department?.toLowerCase().includes(searchTerm.toLowerCase());
-    
+
     const matchesRole = filterRole === 'all' || user.role === filterRole;
-    
+
     return matchesSearch && matchesRole;
   });
 
   const getRoleColor = (role: string) => {
     switch (role) {
-      case 'admin': return 'destructive';
-      case 'investigator': return 'default';
-      case 'analyst': return 'secondary';
-      case 'legal': return 'outline';
-      default: return 'secondary';
+      case 'admin':
+        return 'destructive';
+      case 'investigator':
+        return 'default';
+      case 'analyst':
+        return 'secondary';
+      case 'legal':
+        return 'outline';
+      default:
+        return 'secondary';
     }
   };
 
-  // Only allow admin users to access this page
+  // 🔐 Only admins can access this page
   if (profile?.role !== 'admin') {
     return (
       <div className="p-6">
@@ -115,7 +118,9 @@ const Users = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold">User Management</h1>
-          <p className="text-muted-foreground">Manage user accounts, roles, and permissions</p>
+          <p className="text-muted-foreground">
+            Manage user accounts, roles, and permissions
+          </p>
         </div>
         <Button onClick={() => setAddDialogOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
@@ -156,8 +161,8 @@ const Users = () => {
                   <UsersIcon className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                   <h3 className="text-lg font-semibold mb-2">No users found</h3>
                   <p className="text-muted-foreground">
-                    {searchTerm || filterRole !== 'all' 
-                      ? 'No users match your search criteria.' 
+                    {searchTerm || filterRole !== 'all'
+                      ? 'No users match your search criteria.'
                       : 'No users available.'}
                   </p>
                 </div>
@@ -184,9 +189,7 @@ const Users = () => {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Role</span>
-                    <Badge variant={getRoleColor(user.role)}>
-                      {user.role}
-                    </Badge>
+                    <Badge variant={getRoleColor(user.role)}>{user.role}</Badge>
                   </div>
                   {user.badge_number && (
                     <div className="flex items-center justify-between">
@@ -202,7 +205,9 @@ const Users = () => {
                   )}
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Joined</span>
-                    <span className="text-sm">{new Date(user.created_at).toLocaleDateString()}</span>
+                    <span className="text-sm">
+                      {new Date(user.created_at).toLocaleDateString()}
+                    </span>
                   </div>
                 </div>
               </CardContent>
@@ -210,7 +215,7 @@ const Users = () => {
           ))
         )}
       </div>
-      
+
       <AddUserDialog
         open={addDialogOpen}
         onOpenChange={setAddDialogOpen}

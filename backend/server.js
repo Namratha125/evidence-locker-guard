@@ -165,6 +165,39 @@ app.get("/cases/:id", async (req, res) => {
   res.json(rows[0]);
 });
 
+// GET all tags with evidence count
+app.get('/tags', async (req, res) => {
+  try {
+    const [tags] = await db.query(`
+      SELECT t.*, p.full_name AS created_by_name,
+        (SELECT COUNT(*) FROM evidence_tags et WHERE et.tag_id = t.id) AS evidence_count
+      FROM tags t
+      LEFT JOIN profiles p ON t.created_by = p.id
+      ORDER BY t.created_at DESC
+    `);
+    res.json(
+      tags.map(tag => ({
+        ...tag,
+        created_by: { full_name: tag.created_by_name }
+      }))
+    );
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error fetching tags' });
+  }
+});
+
+// DELETE a tag
+app.delete('/tags/:id', async (req, res) => {
+  try {
+    await db.query('DELETE FROM tags WHERE id = ?', [req.params.id]);
+    res.json({ message: 'Tag deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete tag' });
+  }
+});
+
+
 // ---------- Dashboard endpoints ----------
 
 // Get overall dashboard stats

@@ -7,7 +7,17 @@ import { Search, Plus, Tag, Edit, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import CreateTagDialog from '@/components/CreateTagDialog';
 import EditTagDialog from '@/components/EditTagDialog';
-import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+  AlertDialogTrigger
+} from '@/components/ui/alert-dialog';
 
 interface TagItem {
   id: string;
@@ -33,34 +43,13 @@ const Tags = () => {
     fetchTags();
   }, []);
 
+  // ✅ Fetch all tags (with evidence count + creator)
   const fetchTags = async () => {
     try {
-      const { data: tagsData, error } = await supabase
-        .from('tags')
-        .select(`
-          *,
-          created_by:profiles(full_name)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      // Get evidence count for each tag
-      const tagsWithCount = await Promise.all(
-        (tagsData || []).map(async (tag) => {
-          const { count } = await supabase
-            .from('evidence_tags')
-            .select('*', { count: 'exact', head: true })
-            .eq('tag_id', tag.id);
-          
-          return {
-            ...tag,
-            evidence_count: count || 0
-          };
-        })
-      );
-
-      setTags(tagsWithCount);
+      const res = await fetch('http://localhost:5000/tags');
+      if (!res.ok) throw new Error('Failed to fetch tags');
+      const data = await res.json();
+      setTags(data);
     } catch (error: any) {
       toast({
         title: "Error",
@@ -77,22 +66,13 @@ const Tags = () => {
     setEditDialogOpen(true);
   };
 
+  // ✅ Delete tag (MySQL API)
   const handleDeleteTag = async (tagId: string) => {
     try {
-      const { error } = await supabase
-        .from('tags')
-        .delete()
-        .eq('id', tagId);
-
-      if (error) throw error;
-
-      // Create audit log
-      await createAuditLog({
-        action: 'delete',
-        resource_type: 'tag',
-        resource_id: tagId,
-        details: { tag_name: tags.find(t => t.id === tagId)?.name }
+      const res = await fetch(`http://localhost:5000/tags/${tagId}`, {
+        method: 'DELETE',
       });
+      if (!res.ok) throw new Error('Failed to delete tag');
 
       toast({
         title: "Success",
@@ -134,7 +114,9 @@ const Tags = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold">Tag Management</h1>
-          <p className="text-muted-foreground">Organize evidence with custom tags and labels</p>
+          <p className="text-muted-foreground">
+            Organize evidence with custom tags and labels
+          </p>
         </div>
         <Button onClick={() => setCreateDialogOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
@@ -163,7 +145,9 @@ const Tags = () => {
                   <Tag className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                   <h3 className="text-lg font-semibold mb-2">No tags found</h3>
                   <p className="text-muted-foreground">
-                    {searchTerm ? 'No tags match your search criteria.' : 'Create your first tag to organize evidence.'}
+                    {searchTerm
+                      ? 'No tags match your search criteria.'
+                      : 'Create your first tag to organize evidence.'}
                   </p>
                 </div>
               </CardContent>
@@ -175,14 +159,18 @@ const Tags = () => {
               <CardHeader className="pb-3">
                 <div className="flex justify-between items-start">
                   <CardTitle className="flex items-center gap-2">
-                    <div 
-                      className="w-4 h-4 rounded-full" 
+                    <div
+                      className="w-4 h-4 rounded-full"
                       style={{ backgroundColor: tag.color }}
                     />
                     {tag.name}
                   </CardTitle>
                   <div className="flex gap-1">
-                    <Button size="sm" variant="ghost" onClick={() => handleEditTag(tag)}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleEditTag(tag)}
+                    >
                       <Edit className="h-4 w-4" />
                     </Button>
                     <AlertDialog>
@@ -200,7 +188,9 @@ const Tags = () => {
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleDeleteTag(tag.id)}>
+                          <AlertDialogAction
+                            onClick={() => handleDeleteTag(tag.id)}
+                          >
                             Delete
                           </AlertDialogAction>
                         </AlertDialogFooter>
@@ -213,7 +203,9 @@ const Tags = () => {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Evidence Count</span>
-                    <Badge variant="secondary">{tag.evidence_count || 0}</Badge>
+                    <Badge variant="secondary">
+                      {tag.evidence_count || 0}
+                    </Badge>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Created by</span>
@@ -221,7 +213,9 @@ const Tags = () => {
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Created</span>
-                    <span>{new Date(tag.created_at).toLocaleDateString()}</span>
+                    <span>
+                      {new Date(tag.created_at).toLocaleDateString()}
+                    </span>
                   </div>
                 </div>
               </CardContent>
@@ -229,13 +223,13 @@ const Tags = () => {
           ))
         )}
       </div>
-      
+
       <CreateTagDialog
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
         onTagCreated={fetchTags}
       />
-      
+
       <EditTagDialog
         tag={selectedTag}
         open={editDialogOpen}
