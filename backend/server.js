@@ -3,6 +3,7 @@ import mysql from "mysql2/promise";
 import cors from "cors";
 import dotenv from "dotenv";
 import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 
 dotenv.config();
 
@@ -10,9 +11,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ---------------------------
+// ---------------------------------------
 // ✅ MySQL connection setup
-// ---------------------------
+// ---------------------------------------
 const db = await mysql.createPool({
   host: process.env.DB_HOST || "localhost",
   user: process.env.DB_USER || "root",
@@ -29,9 +30,9 @@ try {
   process.exit(1);
 }
 
-// ---------------------------
-// ✅ Routes
-// ---------------------------
+// ---------------------------------------
+// ✅ ROUTES
+// ---------------------------------------
 
 // 🔹 Get all evidence
 app.get("/evidence", async (req, res) => {
@@ -54,7 +55,6 @@ app.post("/evidence", async (req, res) => {
        VALUES (UUID(), ?, ?, ?, ?)`,
       [case_id, title, description, uploaded_by]
     );
-
     res.json({ message: "Evidence added successfully" });
   } catch (err) {
     console.error("Error adding evidence:", err.sqlMessage || err);
@@ -62,64 +62,140 @@ app.post("/evidence", async (req, res) => {
   }
 });
 
-// 🔹 Get all users
-app.get("/users", async (req, res) => {
+// 🔹 Get all profiles (users)
+app.get("/profiles", async (req, res) => {
   try {
-    const [rows] = await db.query("SELECT id, username, role FROM profiles");
+    const [rows] = await db.query(
+      "SELECT id, username, full_name, role, department, badge_number, email FROM profiles"
+    );
     res.json(rows);
   } catch (err) {
-    console.error("Error fetching users:", err);
-    res.status(500).json({ message: "Failed to fetch users" });
+    console.error("Error fetching profiles:", err);
+    res.status(500).json({ message: "Failed to fetch profiles" });
   }
 });
 
-// 🔹 Add new user (basic, no hashing — use /api/users for secure version)
-app.post("/users", async (req, res) => {
-  const { username, password, role } = req.body;
-  try {
-    await db.query(
-      "INSERT INTO profiles (id, username, full_name, role) VALUES (UUID(), ?, ?, ?)",
-      [username, username, role]
-    );
-    res.json({ message: "User registered successfully" });
-  } catch (err) {
-    console.error("Error registering user:", err);
-    res.status(500).json({ message: "Failed to register user" });
-  }
-});
-
-// 🔹 Secure user registration (used by AddUserDialog.tsx)
+// 🔹 Register new user (secure)
 app.post("/api/users", async (req, res) => {
   const { email, password, full_name, username, role, badge_number, department } = req.body;
+  const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || "10", 10);
+
+  if (!email || !password || !username) {
+    return res.status(400).json({ message: "Email, password, and username are required" });
+  }
 
   try {
-    // Hash the password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
-    // Insert into profiles table
     await db.query(
-      `INSERT INTO profiles (id, username, full_name, role, badge_number, department)
-       VALUES (UUID(), ?, ?, ?, ?, ?)`,
-      [username, full_name, role, badge_number, department]
+      `INSERT INTO profiles (id, username, full_name, role, badge_number, department, email, password)
+       VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?)`,
+      [username, full_name, role, badge_number, department, email, hashedPassword]
     );
 
-    // Optionally insert into a login table
-    await db.query(
-      `INSERT INTO users (id, email, password, username)
-       VALUES (UUID(), ?, ?, ?)`,
-      [email, hashedPassword, username]
-    );
-
-    res.json({ message: "User created successfully" });
+    res.status(201).json({ message: "User created successfully" });
   } catch (err) {
     console.error("Error creating user:", err);
+    if (err.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ message: "Email or username already exists" });
+    }
     res.status(500).json({ message: "Failed to create user" });
   }
 });
 
-// ---------------------------
-// ✅ Start the server
-// ---------------------------
+// 🔹 User login
+app.post("/api/login", async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ message: "Email and password are required" });
+  }
+
+  try {
+    const [rows] = await db.query("SELECT * FROM profiles WHERE email = ?", [email]);
+    if (rows.length === 0) return res.status(401).json({ message: "Invalid credentials" });
+
+    const user = rows[0];
+    const isValid = await bcrypt.compare(password, user.password);
+    if (!isValid) return res.status(401).json({ message: "Invalid credentials" });
+
+    // Generate JWT
+    const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: "1h" });
+
+    // Exclude password before sending back
+    const { password: _p, ...userWithoutPassword } = user;
+    res.json({ message: "Login successful", user: userWithoutPassword, token });
+  } catch (err) {
+    console.error("Login error:", err);
+    res.status(500).json({ message: "Login failed" });
+  }
+});
+
+// 🔹 Get user profile by ID
+app.get("/api/profile/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const [rows] = await db.query(
+      "SELECT id, username, full_name, role, badge_number, department, email FROM profiles WHERE id = ?",
+      [id]
+    );
+    if (rows.length === 0) return res.status(404).json({ message: "Profile not found" });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error("Profile fetch error:", err);
+    res.status(500).json({ message: "Error fetching profile" });
+  }
+});
+
+// Get evidence tags
+app.get("/evidence/:id/tags", async (req, res) => {
+  const { id } = req.params;
+  const [rows] = await db.query(`
+    SELECT t.id, t.name, t.color
+    FROM evidence_tags et
+    JOIN tags t ON et.tag_id = t.id
+    WHERE et.evidence_id = ?`, [id]);
+  res.json(rows);
+});
+
+// Get case details
+app.get("/cases/:id", async (req, res) => {
+  const { id } = req.params;
+  const [rows] = await db.query("SELECT id, case_number, title FROM cases WHERE id = ?", [id]);
+  res.json(rows[0]);
+});
+
+// ---------- Dashboard endpoints ----------
+
+// Get overall dashboard stats
+app.get("/api/dashboard/stats", async (req, res) => {
+  try {
+    const [[{ totalCases }]] = await db.query("SELECT COUNT(*) AS totalCases FROM cases");
+    const [[{ totalEvidence }]] = await db.query("SELECT COUNT(*) AS totalEvidence FROM evidence");
+    const [[{ totalTags }]] = await db.query("SELECT COUNT(*) AS totalTags FROM tags");
+
+    const [recentCases] = await db.query(
+      "SELECT id, case_number, title, status FROM cases ORDER BY created_at DESC LIMIT 5"
+    );
+
+    const [recentEvidence] = await db.query(
+      `SELECT e.id, e.title, e.file_type, c.case_number
+       FROM evidence e
+       LEFT JOIN cases c ON e.case_id = c.id
+       ORDER BY e.created_at DESC LIMIT 5`
+    );
+
+    res.json({ totalCases, totalEvidence, totalTags, recentCases, recentEvidence });
+  } catch (err) {
+    console.error("Error fetching dashboard stats:", err);
+    res.status(500).json({ message: "Failed to load dashboard stats" });
+  }
+});
+
+
+// ---------------------------------------
+// ✅ Start server
+// ---------------------------------------
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);
