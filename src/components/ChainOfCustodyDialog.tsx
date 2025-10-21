@@ -22,25 +22,27 @@ interface CustodyRecord {
   action: string;
   timestamp: string;
   location: string;
-  notes: string;
-  from_user: { full_name: string } | null;
-  to_user: { full_name: string } | null;
+  notes: string | null;
+  from_user: { id?: string; full_name?: string } | null;
+  to_user: { id?: string; full_name?: string } | null;
 }
 
-interface User {
+interface UserItem {
   id: string;
   full_name: string;
 }
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 const ChainOfCustodyDialog = ({ open, onOpenChange, evidenceId }: ChainOfCustodyDialogProps) => {
   const [custodyRecords, setCustodyRecords] = useState<CustodyRecord[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserItem[]>([]);
   const [action, setAction] = useState<'created' | 'transferred' | 'accessed' | 'downloaded' | 'modified' | 'archived'>('transferred');
   const [toUserId, setToUserId] = useState('');
   const [location, setLocation] = useState('');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
-  const { user } = useAuth();
+  const { user } = useAuth(); // expects { id, ... }
   const { toast } = useToast();
 
   useEffect(() => {
@@ -48,95 +50,121 @@ const ChainOfCustodyDialog = ({ open, onOpenChange, evidenceId }: ChainOfCustody
       fetchCustodyRecords();
       fetchUsers();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, evidenceId]);
 
   const fetchCustodyRecords = async () => {
     try {
-      const { data, error } = await supabase
-        .from('chain_of_custody')
-        .select(`
-          *,
-          from_user:profiles!chain_of_custody_from_user_id_fkey(full_name),
-          to_user:profiles!chain_of_custody_to_user_id_fkey(full_name)
-        `)
-        .eq('evidence_id', evidenceId)
-        .order('timestamp', { ascending: false });
-
-      if (error) throw error;
-      setCustodyRecords(data || []);
-    } catch (error: any) {
+      const res = await fetch(`${API_BASE}/evidence/${encodeURIComponent(evidenceId)}/custody`);
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || 'Failed to fetch custody records');
+      }
+      const data = await res.json();
+      // Expecting array of records with from_user_name and to_user_name or nested objects
+      const mapped: CustodyRecord[] = data.map((r: any) => ({
+        id: r.id,
+        action: r.action,
+        timestamp: r.timestamp,
+        location: r.location,
+        notes: r.notes,
+        from_user: r.from_user ? { id: r.from_user.id, full_name: r.from_user.full_name } : null,
+        to_user: r.to_user ? { id: r.to_user.id, full_name: r.to_user.full_name } : null,
+      }));
+      setCustodyRecords(mapped);
+    } catch (err: any) {
+      console.error('Fetch custody error:', err);
       toast({
-        title: "Error",
-        description: "Failed to fetch custody records: " + error.message,
-        variant: "destructive",
+        title: 'Error',
+        description: `Failed to fetch custody records: ${err.message || err}`,
+        variant: 'destructive',
       });
     }
   };
 
   const fetchUsers = async () => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .order('full_name');
-
-      if (error) throw error;
-      setUsers(data || []);
-    } catch (error: any) {
+      const res = await fetch(`${API_BASE}/profiles`);
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || 'Failed to fetch users');
+      }
+      const data = await res.json();
+      // data: array of { id, full_name }
+      setUsers(data);
+    } catch (err: any) {
+      console.error('Fetch users error:', err);
       toast({
-        title: "Error",
-        description: "Failed to fetch users: " + error.message,
-        variant: "destructive",
+        title: 'Error',
+        description: `Failed to fetch users: ${err.message || err}`,
+        variant: 'destructive',
       });
     }
   };
 
   const handleAddRecord = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user?.id) {
+      toast({ title: 'Not authenticated', description: 'You must be signed in to add records', variant: 'destructive' });
+      return;
+    }
+    if (!location.trim()) {
+      toast({ title: 'Missing field', description: 'Location is required', variant: 'destructive' });
+      return;
+    }
 
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from('chain_of_custody')
-        .insert({
-          evidence_id: evidenceId,
-          action,
-          from_user_id: user.id,
-          to_user_id: toUserId || null,
-          location,
-          notes
-        });
+      const body = {
+        evidence_id: evidenceId,
+        action,
+        from_user_id: user.id,
+        to_user_id: toUserId || null,
+        location,
+        notes: notes || null,
+      };
 
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: "Custody record added successfully",
+      const res = await fetch(`${API_BASE}/chain_of_custody`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
       });
-      
+
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || 'Failed to create custody record');
+      }
+
+      toast({ title: 'Success', description: 'Custody record added successfully' });
+
+      // reset form
       setAction('transferred');
       setToUserId('');
       setLocation('');
       setNotes('');
-      fetchCustodyRecords();
-    } catch (error: any) {
+
+      // refresh
+      await fetchCustodyRecords();
+    } catch (err: any) {
+      console.error('Add custody error:', err);
       toast({
-        title: "Error",
-        description: "Failed to add custody record: " + error.message,
-        variant: "destructive",
+        title: 'Error',
+        description: `Failed to add custody record: ${err.message || err}`,
+        variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
   };
 
-  const getActionColor = (action: string) => {
-    switch (action) {
+  const getActionColor = (actionStr: string) => {
+    switch (actionStr) {
       case 'transferred': return 'default';
       case 'accessed': return 'secondary';
       case 'modified': return 'outline';
       case 'archived': return 'destructive';
+      case 'downloaded': return 'secondary';
+      case 'created': return 'default';
       default: return 'default';
     }
   };
@@ -146,9 +174,7 @@ const ChainOfCustodyDialog = ({ open, onOpenChange, evidenceId }: ChainOfCustody
       <DialogContent className="sm:max-w-[800px] max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Chain of Custody</DialogTitle>
-          <DialogDescription>
-            Track evidence handling and transfers
-          </DialogDescription>
+          <DialogDescription>Track evidence handling and transfers</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">
@@ -167,13 +193,16 @@ const ChainOfCustodyDialog = ({ open, onOpenChange, evidenceId }: ChainOfCustody
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="created">Created</SelectItem>
                         <SelectItem value="transferred">Transfer</SelectItem>
                         <SelectItem value="accessed">Access</SelectItem>
+                        <SelectItem value="downloaded">Downloaded</SelectItem>
                         <SelectItem value="modified">Modified</SelectItem>
                         <SelectItem value="archived">Archive</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
+
                   <div className="space-y-2">
                     <Label htmlFor="toUser">To User (Optional)</Label>
                     <Select value={toUserId} onValueChange={setToUserId}>
@@ -181,15 +210,17 @@ const ChainOfCustodyDialog = ({ open, onOpenChange, evidenceId }: ChainOfCustody
                         <SelectValue placeholder="Select user" />
                       </SelectTrigger>
                       <SelectContent>
-                        {users.map((user) => (
-                          <SelectItem key={user.id} value={user.id}>
-                            {user.full_name}
+                        <SelectItem value="">— None —</SelectItem>
+                        {users.map((u) => (
+                          <SelectItem key={u.id} value={u.id}>
+                            {u.full_name}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="location">Location</Label>
                   <Input
@@ -200,6 +231,7 @@ const ChainOfCustodyDialog = ({ open, onOpenChange, evidenceId }: ChainOfCustody
                     required
                   />
                 </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="notes">Notes</Label>
                   <Textarea
@@ -210,8 +242,9 @@ const ChainOfCustodyDialog = ({ open, onOpenChange, evidenceId }: ChainOfCustody
                     rows={3}
                   />
                 </div>
+
                 <Button type="submit" disabled={loading || !location}>
-                  {loading ? "Adding..." : "Add Record"}
+                  {loading ? 'Adding...' : 'Add Record'}
                 </Button>
               </form>
             </CardContent>
@@ -224,9 +257,7 @@ const ChainOfCustodyDialog = ({ open, onOpenChange, evidenceId }: ChainOfCustody
             </CardHeader>
             <CardContent>
               {custodyRecords.length === 0 ? (
-                <p className="text-muted-foreground text-center py-4">
-                  No custody records found
-                </p>
+                <p className="text-muted-foreground text-center py-4">No custody records found</p>
               ) : (
                 <div className="space-y-4">
                   {custodyRecords.map((record) => (
@@ -234,13 +265,12 @@ const ChainOfCustodyDialog = ({ open, onOpenChange, evidenceId }: ChainOfCustody
                       <div className="flex items-start justify-between">
                         <div className="space-y-2">
                           <div className="flex items-center gap-2">
-                            <Badge variant={getActionColor(record.action)}>
-                              {record.action}
-                            </Badge>
+                            <Badge variant={getActionColor(record.action)}>{record.action}</Badge>
                             <span className="text-sm text-muted-foreground">
-                              {new Date(record.timestamp).toLocaleString()}
+                              {record.timestamp ? new Date(record.timestamp).toLocaleString() : ''}
                             </span>
                           </div>
+
                           <div className="flex items-center gap-4 text-sm">
                             <div className="flex items-center gap-1">
                               <User className="h-4 w-4" />
@@ -249,7 +279,7 @@ const ChainOfCustodyDialog = ({ open, onOpenChange, evidenceId }: ChainOfCustody
                             {record.to_user && (
                               <div className="flex items-center gap-1">
                                 <User className="h-4 w-4" />
-                                <span>To: {record.to_user.full_name}</span>
+                                <span>To: {record.to_user?.full_name}</span>
                               </div>
                             )}
                             <div className="flex items-center gap-1">
@@ -257,11 +287,8 @@ const ChainOfCustodyDialog = ({ open, onOpenChange, evidenceId }: ChainOfCustody
                               <span>{record.location}</span>
                             </div>
                           </div>
-                          {record.notes && (
-                            <p className="text-sm text-muted-foreground">
-                              {record.notes}
-                            </p>
-                          )}
+
+                          {record.notes && <p className="text-sm text-muted-foreground">{record.notes}</p>}
                         </div>
                       </div>
                     </div>
@@ -273,9 +300,7 @@ const ChainOfCustodyDialog = ({ open, onOpenChange, evidenceId }: ChainOfCustody
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Close
-          </Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

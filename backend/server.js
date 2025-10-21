@@ -250,6 +250,71 @@ app.get("/api/dashboard/stats", async (req, res) => {
   }
 });
 
+// GET custody records for an evidence (ordered desc)
+app.get('/evidence/:id/custody', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const [rows] = await db.query(
+      `SELECT coc.id, coc.action, coc.location, coc.notes, coc.timestamp,
+              fromp.id AS from_user_id, fromp.full_name AS from_user_full_name,
+              top.id AS to_user_id, top.full_name AS to_user_full_name
+       FROM chain_of_custody coc
+       LEFT JOIN profiles fromp ON fromp.id = coc.from_user_id
+       LEFT JOIN profiles top ON top.id = coc.to_user_id
+       WHERE coc.evidence_id = ?
+       ORDER BY coc.timestamp DESC`,
+      [id]
+    );
+
+    // map to expected shape
+    const mapped = rows.map(r => ({
+      id: r.id,
+      action: r.action,
+      location: r.location,
+      notes: r.notes,
+      timestamp: r.timestamp,
+      from_user: r.from_user_id ? { id: r.from_user_id, full_name: r.from_user_full_name } : null,
+      to_user: r.to_user_id ? { id: r.to_user_id, full_name: r.to_user_full_name } : null,
+    }));
+
+    res.json(mapped);
+  } catch (err) {
+    console.error('Error getting custody records', err);
+    res.status(500).json({ message: 'Failed to fetch custody records' });
+  }
+});
+
+// POST create custody record
+app.post('/chain_of_custody', async (req, res) => {
+  const { evidence_id, action, from_user_id, to_user_id, location, notes } = req.body;
+  if (!evidence_id || !action || !from_user_id || !location) {
+    return res.status(400).json({ message: 'Missing required fields' });
+  }
+  try {
+    // if your evidence.id is CHAR(36) use UUID()
+    await db.query(
+      `INSERT INTO chain_of_custody (id, evidence_id, action, from_user_id, to_user_id, location, notes, timestamp)
+       VALUES (UUID(), ?, ?, ?, ?, ?, ?, NOW())`,
+      [evidence_id, action, from_user_id, to_user_id || null, location, notes || null]
+    );
+    res.status(201).json({ message: 'Custody record created' });
+  } catch (err) {
+    console.error('Error inserting custody record', err);
+    res.status(500).json({ message: 'Failed to create custody record' });
+  }
+});
+
+// GET profiles list (id, full_name) - used to populate "To user"
+app.get('/profiles', async (req, res) => {
+  try {
+    const [rows] = await db.query('SELECT id, full_name FROM profiles ORDER BY full_name');
+    res.json(rows);
+  } catch (err) {
+    console.error('Error fetching profiles', err);
+    res.status(500).json({ message: 'Failed to fetch profiles' });
+  }
+});
+
 
 // ---------------------------------------
 // ✅ Start server
