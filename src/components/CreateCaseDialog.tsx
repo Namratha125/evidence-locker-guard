@@ -14,6 +14,8 @@ interface CreateCaseDialogProps {
   onCaseCreated: () => void;
 }
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 const CreateCaseDialog = ({ open, onOpenChange, onCaseCreated }: CreateCaseDialogProps) => {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -24,17 +26,25 @@ const CreateCaseDialog = ({ open, onOpenChange, onCaseCreated }: CreateCaseDialo
     status: 'active'
   });
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, token } = useAuth() as any; // if you store token in auth; otherwise remove token usage
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user) {
+      toast({ title: 'Unauthorized', description: 'You must be signed in to create cases', variant: 'destructive' });
+      return;
+    }
 
     setLoading(true);
     try {
-      const { error, data: caseData } = await supabase
-        .from('cases')
-        .insert({
+      const res = await fetch(`${API_BASE}/api/cases`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // If you use JWT auth, include the token:
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
           case_number: formData.caseNumber,
           title: formData.title,
           description: formData.description,
@@ -42,18 +52,35 @@ const CreateCaseDialog = ({ open, onOpenChange, onCaseCreated }: CreateCaseDialo
           status: formData.status,
           created_by: user.id
         })
-        .select('id')
-        .single();
-
-      if (error) throw error;
-
-      // Create audit log
-      await createAuditLog({
-        action: 'create',
-        resource_type: 'case',
-        resource_id: caseData.id,
-        details: { case_number: formData.caseNumber, title: formData.title }
       });
+
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || 'Failed to create case');
+      }
+
+      const created = await res.json();
+
+      // Optionally create audit log (backend can do this too)
+      try {
+        await fetch(`${API_BASE}/api/audit_logs`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            user_id: user.id,
+            action: 'create',
+            resource_type: 'case',
+            resource_id: created.id,
+            details: { case_number: formData.caseNumber, title: formData.title }
+          })
+        });
+      } catch (err) {
+        // non-blocking: audit failure shouldn't block UI
+        console.warn('audit log failed', err);
+      }
 
       toast({
         title: "Success",
@@ -72,7 +99,7 @@ const CreateCaseDialog = ({ open, onOpenChange, onCaseCreated }: CreateCaseDialo
     } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to create case: " + error.message,
+        description: "Failed to create case: " + (error.message || error),
         variant: "destructive",
       });
     } finally {

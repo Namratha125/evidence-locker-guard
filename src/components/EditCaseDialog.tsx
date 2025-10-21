@@ -6,12 +6,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-
+import { useAuth } from '@/hooks/useAuth';
 
 interface Case {
   id: string;
@@ -38,6 +38,8 @@ interface EditCaseDialogProps {
   onUpdate: () => void;
 }
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 export default function EditCaseDialog({ case_, open, onOpenChange, onUpdate }: EditCaseDialogProps) {
   const [formData, setFormData] = useState({
     case_number: '',
@@ -52,6 +54,7 @@ export default function EditCaseDialog({ case_, open, onOpenChange, onUpdate }: 
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const { user, token } = useAuth() as any; // update if your auth shape differs
 
   useEffect(() => {
     if (case_) {
@@ -74,21 +77,19 @@ export default function EditCaseDialog({ case_, open, onOpenChange, onUpdate }: 
 
   const fetchUsers = async () => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name, role')
-        .order('full_name');
-
-      if (error) throw error;
+      const res = await fetch(`${API_BASE}/profiles`);
+      if (!res.ok) throw new Error('Failed to load users');
+      const data = await res.json();
+      // backend returns [{id, full_name}, ...]
       setUsers(data || []);
-    } catch (error: any) {
-      console.error('Error fetching users:', error);
+    } catch (err: any) {
+      console.error('Error fetching users:', err);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.case_number.trim() || !formData.title.trim()) {
       toast({
         title: "Error",
@@ -103,33 +104,47 @@ export default function EditCaseDialog({ case_, open, onOpenChange, onUpdate }: 
       const updateData: any = {
         case_number: formData.case_number.trim(),
         title: formData.title.trim(),
-        description: formData.description.trim(),
+        description: formData.description.trim() || null,
         status: formData.status,
         priority: formData.priority,
         findings: formData.findings.trim() || null,
-        due_date: formData.due_date?.toISOString() || null,
+        due_date: formData.due_date ? formData.due_date.toISOString().slice(0, 19).replace('T', ' ') : null, // MySQL DATETIME friendly
+        assigned_to: formData.assigned_to && formData.assigned_to !== 'unassigned' ? formData.assigned_to : null
       };
 
-      if (formData.assigned_to && formData.assigned_to !== 'unassigned') {
-        updateData.assigned_to = formData.assigned_to;
-      } else {
-        updateData.assigned_to = null;
+      const res = await fetch(`${API_BASE}/api/cases/${case_.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || 'Failed to update case');
       }
 
-      const { error } = await supabase
-        .from('cases')
-        .update(updateData)
-        .eq('id', case_.id);
-
-      if (error) throw error;
-
-      // Create audit log
-      await createAuditLog({
-        action: 'update',
-        resource_type: 'case',
-        resource_id: case_.id,
-        details: { case_number: formData.case_number, changes: updateData }
-      });
+      // Optionally create audit log (backend can also do this)
+      try {
+        await fetch(`${API_BASE}/api/audit_logs`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            user_id: user?.id ?? null,
+            action: 'update',
+            resource_type: 'case',
+            resource_id: case_.id,
+            details: { case_number: formData.case_number, changes: updateData }
+          })
+        });
+      } catch (auditErr) {
+        console.warn('Audit log failed (non-blocking):', auditErr);
+      }
 
       toast({
         title: "Success",
@@ -141,7 +156,7 @@ export default function EditCaseDialog({ case_, open, onOpenChange, onUpdate }: 
     } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to update case: " + error.message,
+        description: "Failed to update case: " + (error.message || error),
         variant: "destructive",
       });
     } finally {
@@ -154,9 +169,7 @@ export default function EditCaseDialog({ case_, open, onOpenChange, onUpdate }: 
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Case</DialogTitle>
-          <DialogDescription>
-            Update case information and assignment details.
-          </DialogDescription>
+          <div className="text-sm text-muted-foreground">Update case information and assignment details.</div>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -229,9 +242,9 @@ export default function EditCaseDialog({ case_, open, onOpenChange, onUpdate }: 
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="unassigned">Unassigned</SelectItem>
-                  {users.map((user) => (
-                    <SelectItem key={user.id} value={user.id}>
-                      {user.full_name} ({user.role})
+                  {users.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.full_name} ({u.role})
                     </SelectItem>
                   ))}
                 </SelectContent>

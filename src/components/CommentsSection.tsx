@@ -13,10 +13,8 @@ interface Comment {
   content: string;
   created_at: string;
   created_by: string;
-  profiles: {
-    full_name: string;
-    username: string;
-  } | null;
+  full_name?: string;
+  username?: string;
 }
 
 interface CommentsSectionProps {
@@ -37,46 +35,15 @@ export default function CommentsSection({ caseId, evidenceId }: CommentsSectionP
 
   const fetchComments = async () => {
     try {
-      let query = supabase
-        .from('comments')
-        .select(`
-          id,
-          content,
-          created_at,
-          created_by
-        `)
-        .order('created_at', { ascending: false });
+      let url = '/api/comments';
+      if (caseId) url += `?caseId=${caseId}`;
+      else if (evidenceId) url += `?evidenceId=${evidenceId}`;
 
-      if (caseId) {
-        query = query.eq('case_id', caseId);
-      } else if (evidenceId) {
-        query = query.eq('evidence_id', evidenceId);
-      }
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Failed to fetch comments');
 
-      const { data: commentsData, error } = await query;
-      if (error) throw error;
-
-      // Fetch user profiles separately
-      if (commentsData && commentsData.length > 0) {
-        const userIds = [...new Set(commentsData.map(c => c.created_by))];
-        const { data: profilesData, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, full_name, username')
-          .in('id', userIds);
-
-        if (profilesError) throw profilesError;
-
-        const profilesMap = new Map(profilesData?.map(p => [p.id, p]) || []);
-        
-        const commentsWithProfiles = commentsData.map(comment => ({
-          ...comment,
-          profiles: profilesMap.get(comment.created_by) || null
-        }));
-
-        setComments(commentsWithProfiles);
-      } else {
-        setComments([]);
-      }
+      const data = await res.json();
+      setComments(data);
     } catch (error: any) {
       toast({
         title: "Error",
@@ -91,26 +58,24 @@ export default function CommentsSection({ caseId, evidenceId }: CommentsSectionP
 
     setIsLoading(true);
     try {
-      const commentData: any = {
+      const body = {
         content: newComment.trim(),
         created_by: user.id,
+        case_id: caseId,
+        evidence_id: evidenceId,
       };
 
-      if (caseId) {
-        commentData.case_id = caseId;
-      } else if (evidenceId) {
-        commentData.evidence_id = evidenceId;
-      }
+      const res = await fetch('/api/comments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
 
-      const { error } = await supabase
-        .from('comments')
-        .insert(commentData);
-
-      if (error) throw error;
+      if (!res.ok) throw new Error('Failed to add comment');
 
       setNewComment('');
       fetchComments();
-      
+
       toast({
         title: "Success",
         description: "Comment added successfully",
@@ -128,12 +93,8 @@ export default function CommentsSection({ caseId, evidenceId }: CommentsSectionP
 
   const deleteComment = async (commentId: string) => {
     try {
-      const { error } = await supabase
-        .from('comments')
-        .delete()
-        .eq('id', commentId);
-
-      if (error) throw error;
+      const res = await fetch(`/api/comments/${commentId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete comment');
 
       fetchComments();
       toast({
@@ -164,8 +125,8 @@ export default function CommentsSection({ caseId, evidenceId }: CommentsSectionP
           onChange={(e) => setNewComment(e.target.value)}
           rows={3}
         />
-        <Button 
-          onClick={addComment} 
+        <Button
+          onClick={addComment}
           disabled={!newComment.trim() || isLoading}
           size="sm"
         >
@@ -177,7 +138,9 @@ export default function CommentsSection({ caseId, evidenceId }: CommentsSectionP
       {/* Comments list */}
       <div className="space-y-3">
         {comments.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No comments yet. Be the first to comment!</p>
+          <p className="text-muted-foreground text-sm">
+            No comments yet. Be the first to comment!
+          </p>
         ) : (
           comments.map((comment) => (
             <Card key={comment.id}>
@@ -186,12 +149,12 @@ export default function CommentsSection({ caseId, evidenceId }: CommentsSectionP
                   <div className="flex items-center gap-2">
                     <Avatar className="h-8 w-8">
                       <AvatarFallback>
-                        {comment.profiles?.full_name?.charAt(0) || 'U'}
+                        {comment.full_name?.charAt(0) || 'U'}
                       </AvatarFallback>
                     </Avatar>
                     <div>
                       <p className="font-medium text-sm">
-                        {comment.profiles?.full_name || 'Unknown User'}
+                        {comment.full_name || 'Unknown User'}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}

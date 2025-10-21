@@ -315,6 +315,267 @@ app.get('/profiles', async (req, res) => {
   }
 });
 
+// ---------------- Comments API ----------------
+
+// GET /api/comments?caseId=... or ?evidenceId=...
+app.get('/api/comments', async (req, res) => {
+  try {
+    const { caseId, evidenceId } = req.query;
+
+    if (!caseId && !evidenceId) {
+      return res.status(400).json({ message: 'caseId or evidenceId required' });
+    }
+
+    // Build query
+    let query = `
+      SELECT c.id, c.content, c.created_at, c.created_by,
+             p.full_name, p.username
+      FROM comments c
+      LEFT JOIN profiles p ON p.id = c.created_by
+      WHERE ${caseId ? 'c.case_id = ?' : 'c.evidence_id = ?'}
+      ORDER BY c.created_at DESC
+    `;
+    const param = caseId ? caseId : evidenceId;
+
+    const [rows] = await db.query(query, [param]);
+    // Map to frontend shape: include nested profiles optional fields if desired
+    const mapped = rows.map(r => ({
+      id: r.id,
+      content: r.content,
+      created_at: r.created_at,
+      created_by: r.created_by,
+      full_name: r.full_name,
+      username: r.username
+    }));
+
+    res.json(mapped);
+  } catch (err) {
+    console.error('Error fetching comments', err);
+    res.status(500).json({ message: 'Failed to fetch comments' });
+  }
+});
+
+// POST /api/comments
+app.post('/api/comments', async (req, res) => {
+  try {
+    const { content, created_by, case_id, evidence_id } = req.body;
+
+    if (!content || !created_by || (!case_id && !evidence_id)) {
+      return res.status(400).json({ message: 'content, created_by and either case_id or evidence_id required' });
+    }
+
+    // Insert new comment
+    await db.query(
+      `INSERT INTO comments (id, content, case_id, evidence_id, created_by, created_at, updated_at)
+       VALUES (UUID(), ?, ?, ?, ?, NOW(), NOW())`,
+      [content, case_id || null, evidence_id || null, created_by]
+    );
+
+    // Return created comment (simple approach: fetch last inserted by created_by+timestamp)
+    const [[created]] = await db.query(
+      `SELECT c.id, c.content, c.created_at, c.created_by, p.full_name, p.username
+       FROM comments c
+       LEFT JOIN profiles p ON p.id = c.created_by
+       WHERE c.created_by = ? 
+       ORDER BY c.created_at DESC LIMIT 1`,
+      [created_by]
+    );
+
+    res.status(201).json(created);
+  } catch (err) {
+    console.error('Error creating comment', err);
+    res.status(500).json({ message: 'Failed to create comment' });
+  }
+});
+
+// DELETE /api/comments/:id
+app.delete('/api/comments/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Optionally you can check auth here (only allow author or admin). For now, delete directly:
+    const [result] = await db.query('DELETE FROM comments WHERE id = ?', [id]);
+    // result.affectedRows can be checked
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Comment not found' });
+    }
+
+    res.json({ message: 'Comment deleted' });
+  } catch (err) {
+    console.error('Error deleting comment', err);
+    res.status(500).json({ message: 'Failed to delete comment' });
+  }
+});
+
+// Create a new case (POST /api/cases)
+app.post('/api/cases', async (req, res) => {
+  try {
+    const { case_number, title, description, priority, status, created_by } = req.body;
+    if (!case_number || !title || !created_by) {
+      return res.status(400).json({ message: 'case_number, title and created_by are required' });
+    }
+
+    await db.query(
+      `INSERT INTO cases (id, case_number, title, description, lead_investigator_id, status, priority, created_by, created_at, updated_at)
+       VALUES (UUID(), ?, ?, ?, NULL, ?, ?, ?, NOW(), NOW())`,
+      [case_number, title, description || null, status || 'active', priority || 'medium', created_by]
+    );
+
+    // Return the created case (fetch by case_number)
+    const [rows] = await db.query('SELECT * FROM cases WHERE case_number = ? ORDER BY created_at DESC LIMIT 1', [case_number]);
+    const created = rows[0];
+
+    // Optionally: create an audit log entry here (or let the frontend call /api/audit_logs)
+    try {
+      await db.query(
+        `INSERT INTO audit_logs (id, user_id, action, resource_type, resource_id, details, timestamp)
+         VALUES (UUID(), ?, 'create', 'case', ?, ?, NOW())`,
+        [created_by, created.id, JSON.stringify({ case_number, title })]
+      );
+    } catch (auditErr) {
+      console.warn('Audit log insert failed', auditErr);
+    }
+
+    res.status(201).json(created);
+  } catch (err) {
+    console.error('Error creating case', err);
+    if (err.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ message: 'Case number already exists' });
+    }
+    res.status(500).json({ message: 'Failed to create case' });
+  }
+});
+
+// Optional: Audit log POST endpoint if frontend should call it separately
+app.post('/api/audit_logs', async (req, res) => {
+  try {
+    const { user_id, action, resource_type, resource_id, details } = req.body;
+    if (!user_id || !action || !resource_type || !resource_id) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+    await db.query(
+      `INSERT INTO audit_logs (id, user_id, action, resource_type, resource_id, details, timestamp)
+       VALUES (UUID(), ?, ?, ?, ?, ?, NOW())`,
+      [user_id, action, resource_type, resource_id, JSON.stringify(details || {})]
+    );
+    res.status(201).json({ message: 'Audit log created' });
+  } catch (err) {
+    console.error('Error creating audit log', err);
+    res.status(500).json({ message: 'Failed to create audit log' });
+  }
+});
+
+// POST /api/tags
+app.post('/api/tags', async (req, res) => {
+  try {
+    const { name, color, created_by } = req.body;
+    if (!name || !created_by) return res.status(400).json({ message: 'name and created_by required' });
+
+    // Insert tag
+    const [result] = await db.query(
+      `INSERT INTO tags (id, name, color, created_by, created_at)
+       VALUES (UUID(), ?, ?, ?, NOW())`,
+      [name, color || '#3b82f6', created_by]
+    );
+
+    // fetch created tag by last insert id isn't straightforward with UUID; fetch by name+created_by+timestamp
+    const [rows] = await db.query(
+      `SELECT t.id, t.name, t.color, t.created_at, p.full_name AS created_by_name
+       FROM tags t
+       LEFT JOIN profiles p ON p.id = t.created_by
+       WHERE t.name = ? AND t.created_by = ?
+       ORDER BY t.created_at DESC LIMIT 1`,
+      [name, created_by]
+    );
+
+    res.status(201).json(rows[0] || { message: 'Tag created' });
+  } catch (err) {
+    console.error('Error creating tag', err);
+    if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'Tag name already exists' });
+    res.status(500).json({ message: 'Failed to create tag' });
+  }
+});
+
+// PUT /api/cases/:id  -- update case fields
+app.put('/api/cases/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      case_number, title, description, status, priority,
+      assigned_to, findings, due_date
+    } = req.body;
+
+    // Build dynamic update columns (only update provided fields)
+    const updates = [];
+    const params = [];
+
+    if (case_number !== undefined) { updates.push('case_number = ?'); params.push(case_number); }
+    if (title !== undefined) { updates.push('title = ?'); params.push(title); }
+    if (description !== undefined) { updates.push('description = ?'); params.push(description); }
+    if (status !== undefined) { updates.push('status = ?'); params.push(status); }
+    if (priority !== undefined) { updates.push('priority = ?'); params.push(priority); }
+    if (assigned_to !== undefined) { updates.push('assigned_to = ?'); params.push(assigned_to); }
+    if (findings !== undefined) { updates.push('findings = ?'); params.push(findings); }
+    if (due_date !== undefined) { updates.push('due_date = ?'); params.push(due_date); }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ message: 'No fields to update' });
+    }
+
+    params.push(id);
+    const sql = `UPDATE cases SET ${updates.join(', ')}, updated_at = NOW() WHERE id = ?`;
+    const [result] = await db.query(sql, params);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Case not found' });
+    }
+
+    // Optionally return updated row:
+    const [rows] = await db.query('SELECT * FROM cases WHERE id = ?', [id]);
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Error updating case', err);
+    res.status(500).json({ message: 'Failed to update case' });
+  }
+});
+
+// PUT /api/tags/:id  -- update tag
+app.put('/api/tags/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, color } = req.body;
+
+    if (!name && !color) {
+      return res.status(400).json({ message: 'Nothing to update' });
+    }
+
+    const updates = [];
+    const params = [];
+
+    if (name !== undefined) { updates.push('name = ?'); params.push(name); }
+    if (color !== undefined) { updates.push('color = ?'); params.push(color); }
+
+    params.push(id);
+    const sql = `UPDATE tags SET ${updates.join(', ')}, created_at = created_at WHERE id = ?`; 
+    // note: created_at preserved; no updated_at column in DDL above. If you have updated_at, set it to NOW().
+
+    const [result] = await db.query(sql, params);
+
+    // If using MySQL2, result.affectedRows indicates success
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Tag not found' });
+    }
+
+    // return updated tag
+    const [rows] = await db.query('SELECT id, name, color, created_by, created_at FROM tags WHERE id = ?', [id]);
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Error updating tag', err);
+    if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'Tag name already exists' });
+    res.status(500).json({ message: 'Failed to update tag' });
+  }
+});
+
 
 // ---------------------------------------
 // ✅ Start server

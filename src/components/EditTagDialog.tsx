@@ -13,48 +13,78 @@ interface EditTagDialogProps {
   onTagUpdated: () => void;
 }
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 const EditTagDialog = ({ tag, open, onOpenChange, onTagUpdated }: EditTagDialogProps) => {
   const [name, setName] = useState('');
   const [color, setColor] = useState('#3b82f6');
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, token } = useAuth() as any; // adjust if useAuth shape differs
 
   useEffect(() => {
     if (tag) {
       setName(tag.name);
-      setColor(tag.color);
+      setColor(tag.color || '#3b82f6');
+    } else {
+      setName('');
+      setColor('#3b82f6');
     }
   }, [tag]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !tag) return;
+    if (!user || !tag) {
+      toast({ title: 'Unauthorized', description: 'You must be signed in', variant: 'destructive' });
+      return;
+    }
 
     setIsLoading(true);
     try {
-      const { error } = await supabase
-        .from('tags')
-        .update({ name, color })
-        .eq('id', tag.id);
-
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: "Tag updated successfully",
+      const res = await fetch(`${API_BASE}/api/tags/${tag.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ name: name.trim(), color: color.trim() })
       });
 
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || 'Failed to update tag');
+      }
+
+      const updated = await res.json();
+
+      // Optional: send audit log (server can also do this)
+      try {
+        await fetch(`${API_BASE}/api/audit_logs`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            user_id: user.id,
+            action: 'update',
+            resource_type: 'tag',
+            resource_id: tag.id,
+            details: { old_name: tag.name, new_name: name.trim(), new_color: color.trim() }
+          })
+        });
+      } catch (auditErr) {
+        console.warn('Audit log failed (non-blocking):', auditErr);
+      }
+
+      toast({ title: 'Success', description: 'Tag updated successfully' });
       onTagUpdated();
       onOpenChange(false);
       setName('');
       setColor('#3b82f6');
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
+    } catch (err: any) {
+      console.error('Update tag error:', err);
+      toast({ title: 'Error', description: (err.message || 'Failed to update tag'), variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
