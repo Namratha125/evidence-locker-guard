@@ -1,100 +1,89 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 
+interface User {
+  id: string;
+  email: string;
+  role: string;
+}
+
 interface Profile {
   id: string;
   username: string;
   full_name: string;
-  role: "admin" | "investigator" | "analyst" | "legal";
+  role: string;
   badge_number?: string;
   department?: string;
+  email?: string;
 }
 
 interface AuthContextType {
-  user: any | null;
+  user: User | null;
   profile: Profile | null;
-  session: any | null;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
+  token: string | null;
+  loading: boolean;
+  signIn: (email: string, password: string) => Promise<{ error?: string }>;
   signUp: (
     email: string,
     password: string,
     userData: Partial<Profile>
-  ) => Promise<{ error: any }>;
-  signOut: () => Promise<void>;
-  loading: boolean;
+  ) => Promise<{ error?: string }>;
+  signOut: () => void;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<any | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [session, setSession] = useState<any | null>(null);
+  const [token, setToken] = useState<string | null>(
+    localStorage.getItem("evidence_locker_token")
+  );
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  // Load user session from localStorage (if previously logged in)
   useEffect(() => {
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) {
-      const parsed = JSON.parse(storedUser);
-      setUser(parsed);
-      setSession({ token: parsed.token });
-      fetchProfile(parsed.id);
-    }
+    const storedUser = localStorage.getItem("evidence_locker_user");
+    const storedProfile = localStorage.getItem("evidence_locker_profile");
+    if (storedUser) setUser(JSON.parse(storedUser));
+    if (storedProfile) setProfile(JSON.parse(storedProfile));
     setLoading(false);
   }, []);
 
-  // Fetch profile by id
-  const fetchProfile = async (id: string) => {
-    try {
-      const res = await fetch(`http://localhost:5000/api/profile/${id}`);
-      const data = await res.json();
-      if (res.ok) setProfile(data);
-      else setProfile(null);
-    } catch (err) {
-      console.error("Error fetching profile:", err);
-      setProfile(null);
-    }
-  };
-
   const signIn = async (email: string, password: string) => {
     try {
-      const res = await fetch("http://localhost:5000/api/login", {
+      const res = await fetch(`${API_BASE}/api/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
 
       const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Login failed");
 
-      if (!res.ok) {
-        toast({
-          title: "Sign In Failed",
-          description: data.message || "Invalid credentials",
-          variant: "destructive",
-        });
-        return { error: data.message };
-      }
+      const { token, user } = data;
+      setToken(token);
+      setUser(user);
+      localStorage.setItem("evidence_locker_token", token);
+      localStorage.setItem("evidence_locker_user", JSON.stringify(user));
 
-      setUser(data.user);
-      setSession({ token: data.token });
-      localStorage.setItem("user", JSON.stringify(data.user));
-      fetchProfile(data.user.id);
+      await fetchProfile(user.id, token);
 
       toast({
-        title: "Signed In",
-        description: `Welcome back, ${data.user.username}`,
+        title: "Login Successful",
+        description: `Welcome back, ${user.email}`,
       });
-
-      return { error: null };
+      return {};
     } catch (error: any) {
       toast({
         title: "Sign In Failed",
         description: error.message,
         variant: "destructive",
       });
-      return { error };
+      return { error: error.message };
     }
   };
 
@@ -104,83 +93,86 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     userData: Partial<Profile>
   ) => {
     try {
-      const response = await fetch("http://localhost:5000/api/users", {
+      const res = await fetch(`${API_BASE}/api/users`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          password,
-          full_name: userData.full_name,
-          username: userData.username,
-          role: userData.role || "analyst",
-          badge_number: userData.badge_number,
-          department: userData.department,
-        }),
+        body: JSON.stringify({ email, password, ...userData }),
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        toast({
-          title: "Sign Up Failed",
-          description: data.message || "Failed to create user",
-          variant: "destructive",
-        });
-        return { error: data.message };
-      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Sign-up failed");
 
       toast({
         title: "Account Created",
-        description: "Your account has been created successfully!",
+        description: "You can now log in with your new account.",
       });
 
-      return { error: null };
+      return {};
     } catch (error: any) {
       toast({
         title: "Sign Up Failed",
         description: error.message,
         variant: "destructive",
       });
-      return { error };
+      return { error: error.message };
     }
   };
 
-  const signOut = async () => {
+  const fetchProfile = async (id: string, jwt?: string) => {
     try {
-      localStorage.removeItem("user");
-      setUser(null);
+      const res = await fetch(`${API_BASE}/api/profile/${id}`, {
+        headers: {
+          Authorization: `Bearer ${jwt || token}`,
+        },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to load profile");
+      setProfile(data);
+      localStorage.setItem("evidence_locker_profile", JSON.stringify(data));
+    } catch (error) {
+      console.error("Profile fetch failed", error);
       setProfile(null);
-      setSession(null);
-      toast({
-        title: "Signed Out",
-        description: "You have been successfully signed out.",
-      });
-    } catch (error: any) {
-      toast({
-        title: "Sign Out Failed",
-        description: error.message,
-        variant: "destructive",
-      });
     }
   };
 
-  const value = {
+  const refreshProfile = async () => {
+    if (user && token) await fetchProfile(user.id, token);
+  };
+
+  const signOut = () => {
+    setUser(null);
+    setProfile(null);
+    setToken(null);
+    localStorage.removeItem("evidence_locker_token");
+    localStorage.removeItem("evidence_locker_user");
+    localStorage.removeItem("evidence_locker_profile");
+    toast({
+      title: "Signed Out",
+      description: "You have been successfully signed out.",
+    });
+  };
+
+  const value: AuthContextType = {
     user,
     profile,
-    session,
+    token,
+    loading,
     signIn,
     signUp,
     signOut,
-    loading,
+    refreshProfile,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
+  if (context === undefined)
     throw new Error("useAuth must be used within an AuthProvider");
-  }
   return context;
 };

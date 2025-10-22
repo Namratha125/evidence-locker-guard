@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Check, ChevronsUpDown, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
 
 interface Tag {
   id: string;
@@ -20,31 +21,45 @@ interface EvidenceTagSelectorProps {
   disabled?: boolean;
 }
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 const EvidenceTagSelector = ({ evidenceId, selectedTags, onTagsChange, disabled }: EvidenceTagSelectorProps) => {
   const [open, setOpen] = useState(false);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const { token } = useAuth() as any; // optional token for auth
 
   useEffect(() => {
-    fetchTags();
-  }, []);
+    fetchAllTags();
+    fetchEvidenceTags();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [evidenceId]);
 
-  const fetchTags = async () => {
+  // load all tags (for the selector)
+  const fetchAllTags = async () => {
     try {
-      const { data, error } = await supabase
-        .from('tags')
-        .select('*')
-        .order('name');
-
-      if (error) throw error;
+      const res = await fetch(`${API_BASE}/tags`);
+      if (!res.ok) throw new Error('Failed to load tags');
+      const data = await res.json();
+      // backend returns array of tags (id, name, color, created_by)
       setAvailableTags(data || []);
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: "Failed to fetch tags: " + error.message,
-        variant: "destructive",
-      });
+    } catch (err: any) {
+      toast({ title: 'Error', description: 'Failed to fetch tags: ' + (err.message || err), variant: 'destructive' });
+    }
+  };
+
+  // load tags currently attached to this evidence
+  const fetchEvidenceTags = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/evidence/${encodeURIComponent(evidenceId)}/tags`);
+      if (!res.ok) throw new Error('Failed to load evidence tags');
+      const data = await res.json();
+      // data is array [{id, name, color}, ...]
+      onTagsChange(data || []);
+    } catch (err: any) {
+      toast({ title: 'Error', description: 'Failed to fetch evidence tags: ' + (err.message || err), variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -54,54 +69,51 @@ const EvidenceTagSelector = ({ evidenceId, selectedTags, onTagsChange, disabled 
     if (selectedTags.find(t => t.id === tag.id)) return;
 
     try {
-      const { error } = await supabase
-        .from('evidence_tags')
-        .insert({
-          evidence_id: evidenceId,
-          tag_id: tag.id
-        });
+      const res = await fetch(`${API_BASE}/evidence/${encodeURIComponent(evidenceId)}/tags`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ tag_id: tag.id })
+      });
 
-      if (error) throw error;
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || 'Failed to add tag');
+      }
 
-      const newTags = [...selectedTags, tag];
+      // optimistic update by adding tag returned from server (or local copy)
+      const added = await res.json().catch(() => tag);
+      const newTags = [...selectedTags, added];
       onTagsChange(newTags);
-      
-      toast({
-        title: "Success",
-        description: `Tag "${tag.name}" added to evidence`,
-      });
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: "Failed to add tag: " + error.message,
-        variant: "destructive",
-      });
+
+      toast({ title: 'Success', description: `Tag "${tag.name}" added to evidence` });
+    } catch (err: any) {
+      toast({ title: 'Error', description: 'Failed to add tag: ' + (err.message || err), variant: 'destructive' });
     }
   };
 
   const handleTagRemove = async (tagId: string) => {
     try {
-      const { error } = await supabase
-        .from('evidence_tags')
-        .delete()
-        .eq('evidence_id', evidenceId)
-        .eq('tag_id', tagId);
+      const res = await fetch(`${API_BASE}/evidence/${encodeURIComponent(evidenceId)}/tags/${encodeURIComponent(tagId)}`, {
+        method: 'DELETE',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      });
 
-      if (error) throw error;
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || 'Failed to remove tag');
+      }
 
       const newTags = selectedTags.filter(t => t.id !== tagId);
       onTagsChange(newTags);
-      
-      toast({
-        title: "Success",
-        description: "Tag removed from evidence",
-      });
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: "Failed to remove tag: " + error.message,
-        variant: "destructive",
-      });
+
+      toast({ title: 'Success', description: 'Tag removed from evidence' });
+    } catch (err: any) {
+      toast({ title: 'Error', description: 'Failed to remove tag: ' + (err.message || err), variant: 'destructive' });
     }
   };
 
@@ -114,10 +126,7 @@ const EvidenceTagSelector = ({ evidenceId, selectedTags, onTagsChange, disabled 
       <div className="flex flex-wrap gap-2">
         {selectedTags.map((tag) => (
           <Badge key={tag.id} variant="secondary" className="flex items-center gap-1">
-            <div 
-              className="w-2 h-2 rounded-full" 
-              style={{ backgroundColor: tag.color }}
-            />
+            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: tag.color }} />
             {tag.name}
             {!disabled && (
               <Button
@@ -132,20 +141,16 @@ const EvidenceTagSelector = ({ evidenceId, selectedTags, onTagsChange, disabled 
           </Badge>
         ))}
       </div>
-      
+
       {!disabled && (
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              role="combobox"
-              aria-expanded={open}
-              className="w-[200px] justify-between"
-            >
+            <Button variant="outline" role="combobox" aria-expanded={open} className="w-[200px] justify-between">
               Add tag...
               <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
             </Button>
           </PopoverTrigger>
+
           <PopoverContent className="w-[200px] p-0">
             <Command>
               <CommandInput placeholder="Search tags..." />
@@ -169,10 +174,7 @@ const EvidenceTagSelector = ({ evidenceId, selectedTags, onTagsChange, disabled 
                             selectedTags.find(t => t.id === tag.id) ? "opacity-100" : "opacity-0"
                           )}
                         />
-                        <div 
-                          className="w-3 h-3 rounded-full mr-2" 
-                          style={{ backgroundColor: tag.color }}
-                        />
+                        <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: tag.color }} />
                         {tag.name}
                       </CommandItem>
                     ))}

@@ -1,13 +1,26 @@
-import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/hooks/useAuth';
-import { Upload } from 'lucide-react';
+import { useState, useEffect } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { Upload } from "lucide-react";
 
 interface UploadEvidenceDialogProps {
   open: boolean;
@@ -21,132 +34,166 @@ interface Case {
   title: string;
 }
 
-const UploadEvidenceDialog = ({ open, onOpenChange, onEvidenceUploaded }: UploadEvidenceDialogProps) => {
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
+const UploadEvidenceDialog = ({
+  open,
+  onOpenChange,
+  onEvidenceUploaded,
+}: UploadEvidenceDialogProps) => {
   const [loading, setLoading] = useState(false);
   const [cases, setCases] = useState<Case[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    caseId: '',
-    collectedBy: '',
-    locationFound: '',
-    collectedDate: new Date().toISOString().split('T')[0]
+    title: "",
+    description: "",
+    caseId: "",
+    collectedBy: "",
+    locationFound: "",
+    collectedDate: new Date().toISOString().split("T")[0],
   });
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
 
   useEffect(() => {
     if (open) {
       fetchCases();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const fetchCases = async () => {
     try {
-      const { data, error } = await supabase
-        .from('cases')
-        .select('id, case_number, title')
-        .eq('status', 'active')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const url = new URL(`${API_BASE}/cases`);
+      url.searchParams.set("status", "active");
+      const res = await fetch(url.toString(), {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: res.statusText }));
+        throw new Error(err.message || "Failed to fetch cases");
+      }
+      const data = await res.json();
       setCases(data || []);
     } catch (error: any) {
+      console.error("fetchCases error:", error);
       toast({
         title: "Error",
-        description: "Failed to fetch cases: " + error.message,
+        description: "Failed to fetch cases: " + (error.message || error),
         variant: "destructive",
       });
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
+    const selectedFile = e.target.files?.[0] ?? null;
     if (selectedFile) {
       setFile(selectedFile);
       if (!formData.title) {
         setFormData({ ...formData, title: selectedFile.name });
       }
+    } else {
+      setFile(null);
     }
   };
 
   const calculateFileHash = async (file: File): Promise<string> => {
     const arrayBuffer = await file.arrayBuffer();
-    const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", arrayBuffer);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !file) return;
+    if (!user || !token) {
+      toast({
+        title: "Error",
+        description: "You must be signed in to upload evidence",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!file) {
+      toast({
+        title: "Error",
+        description: "Please select a file to upload",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!formData.caseId) {
+      toast({
+        title: "Error",
+        description: "Please select a case",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setLoading(true);
     try {
-      // Calculate file hash
+      // compute hash
       const hashValue = await calculateFileHash(file);
 
-      // Upload file to storage
-      const fileName = `${Date.now()}_${file.name}`;
-      const filePath = `${formData.caseId}/${fileName}`;
-      
-      const { error: uploadError } = await supabase.storage
-        .from('evidence-files')
-        .upload(filePath, file);
+      // prepare multipart form data
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("title", formData.title);
+      fd.append("description", formData.description);
+      fd.append("case_id", formData.caseId);
+      fd.append("file_name", file.name);
+      fd.append("file_type", file.type || "");
+      fd.append("file_size", String(file.size));
+      fd.append("hash_value", hashValue);
+      fd.append("collected_by", formData.collectedBy);
+      fd.append("location_found", formData.locationFound);
+      fd.append("collected_date", formData.collectedDate);
+      fd.append("uploaded_by", user.id);
+      fd.append("status", "pending");
 
-      if (uploadError) throw uploadError;
-
-      // Insert evidence record
-      const { error: insertError } = await supabase
-        .from('evidence')
-        .insert({
-          title: formData.title,
-          description: formData.description,
-          case_id: formData.caseId,
-          file_name: file.name,
-          file_path: filePath,
-          file_type: file.type,
-          file_size: file.size,
-          hash_value: hashValue,
-          collected_by: formData.collectedBy,
-          location_found: formData.locationFound,
-          collected_date: formData.collectedDate,
-          uploaded_by: user.id,
-          status: 'pending'
-        });
-
-      if (insertError) throw insertError;
-
-      // Create audit log
-      await createAuditLog({
-        action: 'create',
-        resource_type: 'evidence',
-        resource_id: formData.caseId,
-        details: { title: formData.title, file_name: file.name }
+      // Send to backend. Backend endpoint must handle file (multipart/form-data),
+      // save file (disk / S3), and insert DB record into evidence table.
+      const res = await fetch(`${API_BASE}/evidence/upload`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          // DO NOT set Content-Type here — browser will set the multipart boundary
+        },
+        body: fd,
       });
+
+      const resJson = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(resJson.message || res.statusText || "Upload failed");
+      }
+
+      // optional: create audit log via backend endpoint (server should create audit itself too)
+      // If you have an endpoint for audit logs: POST /audit-logs or similar
+      // await fetch(`${API_BASE}/audit-logs`, { method: 'POST', headers: {...}, body: JSON.stringify({...}) });
 
       toast({
         title: "Success",
         description: "Evidence uploaded successfully",
       });
 
-      // Reset form
+      // reset form
       setFormData({
-        title: '',
-        description: '',
-        caseId: '',
-        collectedBy: '',
-        locationFound: '',
-        collectedDate: new Date().toISOString().split('T')[0]
+        title: "",
+        description: "",
+        caseId: "",
+        collectedBy: "",
+        locationFound: "",
+        collectedDate: new Date().toISOString().split("T")[0],
       });
       setFile(null);
       onOpenChange(false);
       onEvidenceUploaded();
     } catch (error: any) {
+      console.error("Upload error:", error);
       toast({
         title: "Error",
-        description: "Failed to upload evidence: " + error.message,
+        description: "Failed to upload evidence: " + (error.message || error),
         variant: "destructive",
       });
     } finally {
@@ -183,10 +230,14 @@ const UploadEvidenceDialog = ({ open, onOpenChange, onEvidenceUploaded }: Upload
                 </p>
               )}
             </div>
-            
+
             <div className="grid gap-2">
               <Label htmlFor="caseId">Case</Label>
-              <Select value={formData.caseId} onValueChange={(value) => setFormData({ ...formData, caseId: value })} required>
+              <Select
+                value={formData.caseId}
+                onValueChange={(value) => setFormData({ ...formData, caseId: value })}
+                required
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select a case" />
                 </SelectTrigger>
@@ -257,7 +308,7 @@ const UploadEvidenceDialog = ({ open, onOpenChange, onEvidenceUploaded }: Upload
               Cancel
             </Button>
             <Button type="submit" disabled={loading || !file}>
-              {loading ? 'Uploading...' : 'Upload Evidence'}
+              {loading ? "Uploading..." : "Upload Evidence"}
             </Button>
           </DialogFooter>
         </form>
