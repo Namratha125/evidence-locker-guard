@@ -8,8 +8,10 @@ import jwt from "jsonwebtoken";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
+import helmet from 'helmet';
 import { fileURLToPath } from "url";
-import { v4 as uuidv4 } from "uuid";
+import pkg from "uuid";
+const { v4: uuidv4 } = pkg;
 
 dotenv.config();
 
@@ -19,6 +21,16 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(
+  helmet.contentSecurityPolicy({
+    useDefaults: true,
+    directives: {
+      "connect-src": ["'self'", "http://localhost:5000"],
+      "default-src": ["'self'"],
+    },
+  })
+);
+
 
 // --------------------------
 // Ensure uploads dir exists
@@ -43,35 +55,37 @@ const storage = multer.diskStorage({
   },
 });
 const upload = multer({ storage });
-
+const router = express.Router();
 // ---------------------------------------
 // ✅ MySQL connection setup
 // ---------------------------------------
-const db = await mysql.createPool({
+let db;
+(async () => {
+  db = await mysql.createPool({
   host: process.env.DB_HOST || "localhost",
   user: process.env.DB_USER || "root",
   password: process.env.DB_PASSWORD || "",
   database: process.env.DB_NAME || "evidence_locker",
 });
-
-// Test DB connection
 try {
-  await db.query("SELECT 1");
-  console.log("✅ Connected to MySQL");
-} catch (err) {
-  console.error("❌ MySQL connection failed:", err);
-  process.exit(1);
-}
+    await db.query("SELECT 1");
+    console.log("✅ Connected to MySQL");
+  } catch (err) {
+    console.error("❌ MySQL connection failed:", err);
+    process.exit(1);
+  }
+})();
+
 
 // Serve uploaded files
-app.use("/uploads", express.static(UPLOADS_DIR));
+router.use("/uploads", express.static(UPLOADS_DIR));
 
 // ---------------------------------------
 // ROUTES
 // ---------------------------------------
 
 // Consolidated GET /evidence (with case & uploader info)
-app.get("/evidence", async (req, res) => {
+router.get("/evidence", async (req, res) => {
   try {
     const [rows] = await db.query(`
       SELECT e.*,
@@ -113,7 +127,7 @@ app.get("/evidence", async (req, res) => {
 });
 
 // PUT update evidence status
-app.put("/evidence/:id/status", async (req, res) => {
+router.put("/evidence/:id/status", async (req, res) => {
   try {
     const { status } = req.body;
     const { id } = req.params;
@@ -127,7 +141,7 @@ app.put("/evidence/:id/status", async (req, res) => {
 });
 
 // POST create evidence (simple JSON-based insert - used by some components)
-app.post("/evidence", async (req, res) => {
+router.post("/evidence", async (req, res) => {
   try {
     const { case_id, title, description, uploaded_by } = req.body;
     if (!case_id || !title || !uploaded_by) {
@@ -154,7 +168,7 @@ app.post("/evidence", async (req, res) => {
 // Expects multipart/form-data with field "file" and other fields:
 // title, description, case_id (or caseId), collected_by, location_found, collected_date,
 // uploaded_by (profile id), hash_value (optional)
-app.post("/evidence/upload", upload.single("file"), async (req, res) => {
+router.post("/evidence/upload", upload.single("file"), async (req, res) => {
   try {
     const file = req.file;
     const {
@@ -178,7 +192,7 @@ app.post("/evidence/upload", upload.single("file"), async (req, res) => {
     }
 
     const id = uuidv4();
-    const filePathRelative = file ? path.relative(__dirname, file.path) : null; // store relative path
+    const filePathRelative = file ? path.join('uploads', finalCaseId, file.filename) : null;
     const fileType = (file && file.mimetype) || null;
     const fileSize = (file && file.size) || null;
     const fileName = (file && file.originalname) || null;
@@ -217,7 +231,7 @@ app.post("/evidence/upload", upload.single("file"), async (req, res) => {
 // --------------------
 // Profiles / Users
 // --------------------
-app.get("/profiles", async (req, res) => {
+router.get("/profiles", async (req, res) => {
   try {
     const [rows] = await db.query("SELECT id, username, full_name, role, department, badge_number, email FROM profiles ORDER BY full_name");
     res.json(rows);
@@ -228,7 +242,7 @@ app.get("/profiles", async (req, res) => {
 });
 
 // Register new user (secure)
-app.post("/api/users", async (req, res) => {
+router.post("/users", async (req, res) => {
   const { email, password, full_name, username, role, badge_number, department } = req.body;
   const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || "10", 10);
 
@@ -257,7 +271,7 @@ app.post("/api/users", async (req, res) => {
 });
 
 // User login
-app.post("/api/login", async (req, res) => {
+router.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) return res.status(400).json({ message: "Email and password are required" });
@@ -280,7 +294,7 @@ app.post("/api/login", async (req, res) => {
 });
 
 // Get user profile by ID
-app.get("/api/profile/:id", async (req, res) => {
+router.get("/profile/:id", async (req, res) => {
   const { id } = req.params;
   try {
     const [rows] = await db.query("SELECT id, username, full_name, role, badge_number, department, email FROM profiles WHERE id = ?", [id]);
@@ -295,7 +309,7 @@ app.get("/api/profile/:id", async (req, res) => {
 // --------------------
 // Tags / Evidence tags
 // --------------------
-app.get("/evidence/:id/tags", async (req, res) => {
+router.get("/evidence/:id/tags", async (req, res) => {
   try {
     const { id } = req.params;
     const [rows] = await db.query(`
@@ -310,7 +324,7 @@ app.get("/evidence/:id/tags", async (req, res) => {
   }
 });
 
-app.get("/tags", async (req, res) => {
+router.get("/tags", async (req, res) => {
   try {
     const [tags] = await db.query(`
       SELECT t.*, p.full_name AS created_by_name,
@@ -326,7 +340,7 @@ app.get("/tags", async (req, res) => {
   }
 });
 
-app.post("/api/tags", async (req, res) => {
+router.post("/tags", async (req, res) => {
   try {
     const { name, color, created_by } = req.body;
     if (!name || !created_by) return res.status(400).json({ message: "name and created_by required" });
@@ -348,7 +362,7 @@ app.post("/api/tags", async (req, res) => {
   }
 });
 
-app.put("/api/tags/:id", async (req, res) => {
+router.put("/tags/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const { name, color } = req.body;
@@ -374,7 +388,7 @@ app.put("/api/tags/:id", async (req, res) => {
 });
 
 // Add tag relation to evidence
-app.post("/evidence/:id/tags", async (req, res) => {
+router.post("/evidence/:id/tags", async (req, res) => {
   try {
     const evidence_id = req.params.id;
     const { tag_id } = req.body;
@@ -390,7 +404,7 @@ app.post("/evidence/:id/tags", async (req, res) => {
   }
 });
 
-app.delete("/evidence/:id/tags/:tagId", async (req, res) => {
+router.delete("/evidence/:id/tags/:tagId", async (req, res) => {
   try {
     const { id: evidence_id, tagId } = req.params;
     const [result] = await db.query(`DELETE FROM evidence_tags WHERE evidence_id = ? AND tag_id = ?`, [evidence_id, tagId]);
@@ -405,7 +419,7 @@ app.delete("/evidence/:id/tags/:tagId", async (req, res) => {
 // --------------------
 // Cases endpoints
 // --------------------
-app.get("/cases", async (req, res) => {
+router.get("/cases", async (req, res) => {
   try {
     const [rows] = await db.query("SELECT id, case_number, title, status FROM cases ORDER BY created_at DESC");
     res.json(rows);
@@ -416,7 +430,7 @@ app.get("/cases", async (req, res) => {
 });
 
 // Get case details
-app.get("/cases/:id", async (req, res) => {
+router.get("/cases/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const [rows] = await db.query("SELECT id, case_number, title FROM cases WHERE id = ?", [id]);
@@ -428,7 +442,7 @@ app.get("/cases/:id", async (req, res) => {
 });
 
 // Create a new case
-app.post("/api/cases", async (req, res) => {
+router.post("/cases", async (req, res) => {
   try {
     const { case_number, title, description, priority, status, created_by } = req.body;
     if (!case_number || !title || !created_by) return res.status(400).json({ message: "case_number, title and created_by are required" });
@@ -462,7 +476,7 @@ app.post("/api/cases", async (req, res) => {
 });
 
 // Update case
-app.put("/api/cases/:id", async (req, res) => {
+router.put("/cases/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -499,7 +513,7 @@ app.put("/api/cases/:id", async (req, res) => {
 // --------------------
 // Chain of custody
 // --------------------
-app.get("/evidence/:id/custody", async (req, res) => {
+router.get("/evidence/:id/custody", async (req, res) => {
   try {
     const { id } = req.params;
     const [rows] = await db.query(
@@ -530,7 +544,7 @@ app.get("/evidence/:id/custody", async (req, res) => {
   }
 });
 
-app.post("/chain_of_custody", async (req, res) => {
+router.post("/chain_of_custody", async (req, res) => {
   try {
     const { evidence_id, action, from_user_id, to_user_id, location, notes } = req.body;
     if (!evidence_id || !action || !from_user_id || !location) return res.status(400).json({ message: "Missing required fields" });
@@ -550,7 +564,7 @@ app.post("/chain_of_custody", async (req, res) => {
 });
 
 // GET profiles list for "To user" select
-app.get("/profiles/list", async (req, res) => {
+router.get("/profiles/list", async (req, res) => {
   try {
     const [rows] = await db.query("SELECT id, full_name FROM profiles ORDER BY full_name");
     res.json(rows);
@@ -563,7 +577,7 @@ app.get("/profiles/list", async (req, res) => {
 // --------------------
 // Comments endpoints
 // --------------------
-app.get("/api/comments", async (req, res) => {
+router.get("/comments", async (req, res) => {
   try {
     const { caseId, evidenceId } = req.query;
     if (!caseId && !evidenceId) return res.status(400).json({ message: "caseId or evidenceId required" });
@@ -593,7 +607,7 @@ app.get("/api/comments", async (req, res) => {
   }
 });
 
-app.post("/api/comments", async (req, res) => {
+router.post("/comments", async (req, res) => {
   try {
     const { content, created_by, case_id, evidence_id } = req.body;
     if (!content || !created_by || (!case_id && !evidence_id)) return res.status(400).json({ message: "content, created_by and either case_id or evidence_id required" });
@@ -620,7 +634,7 @@ app.post("/api/comments", async (req, res) => {
   }
 });
 
-app.delete("/api/comments/:id", async (req, res) => {
+router.delete("/comments/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const [result] = await db.query("DELETE FROM comments WHERE id = ?", [id]);
@@ -635,7 +649,7 @@ app.delete("/api/comments/:id", async (req, res) => {
 // --------------------
 // Audit logs endpoint
 // --------------------
-app.post("/api/audit_logs", async (req, res) => {
+router.post("/audit_logs", async (req, res) => {
   try {
     const { user_id, action, resource_type, resource_id, details } = req.body;
     if (!user_id || !action || !resource_type || !resource_id) return res.status(400).json({ message: "Missing required fields" });
@@ -655,7 +669,7 @@ app.post("/api/audit_logs", async (req, res) => {
 // --------------------
 // Dashboard stats
 // --------------------
-app.get("/api/dashboard/stats", async (req, res) => {
+router.get("/dashboard/stats", async (req, res) => {
   try {
     const [[{ totalCases }]] = await db.query("SELECT COUNT(*) AS totalCases FROM cases");
     const [[{ totalEvidence }]] = await db.query("SELECT COUNT(*) AS totalEvidence FROM evidence");
@@ -675,7 +689,7 @@ app.get("/api/dashboard/stats", async (req, res) => {
     res.status(500).json({ message: "Failed to load dashboard stats" });
   }
 });
-
+app.use("/api", router);
 // -----------------------
 // Start server
 // -----------------------

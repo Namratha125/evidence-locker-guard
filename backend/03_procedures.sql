@@ -39,8 +39,6 @@ BEGIN
                         file_type,hash_value,uploaded_by)
   VALUES (p_evidence_id,p_case_id,p_title,p_description,p_file_name,p_file_path,
           p_file_size,p_file_type,p_hash_value,p_uploaded_by);
-  INSERT INTO audit_logs (id,user_id,action,resource_type,resource_id)
-  VALUES (UUID(),p_uploaded_by,'Added evidence','evidence',p_evidence_id);
 END$$
 
 CREATE PROCEDURE get_authorized_cases(IN p_user_id CHAR(36))

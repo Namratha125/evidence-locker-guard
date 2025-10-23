@@ -1,12 +1,20 @@
 USE evidence_locker;
 
 -- 1) Create 5 profiles (users)
-INSERT INTO profiles (username, full_name, role) VALUES
-  ('admin','Admin User','admin'),
-  ('invest1','Investigator One','investigator'),
-  ('invest2','Investigator Two','investigator'),
-  ('analyst1','Analyst One','analyst'),
-  ('legal1','Legal Counsel','legal');
+-- Make sure you're using the correct database
+USE evidence_locker;
+
+-- Insert 5 users with email and bcrypt-hashed passwords
+-- Passwords used (plaintext for reference): Admin123!, Invest123!, Invest234!, Analyst123!, Legal123!
+-- These hashes are generated with bcrypt 10 rounds
+
+INSERT INTO profiles (id,username, full_name, role, email, password) VALUES
+(NULL,'admin', 'Admin User', 'admin', 'admin@example.com', '$2b$10$CwTycUXWue0Thq9StjUM0uJ8VbC4h9R0EDpqN3XrN5hK7fUJ92t4W'),
+(NULL,'invest1', 'Investigator One', 'investigator', 'invest1@example.com', '$2b$10$N9qo8uLOickgx2ZMRZo5i.uW8TZp6Kq6FjX.oD/3RZbX4JpPzH/fi'),
+(NULL,'invest2', 'Investigator Two', 'investigator', 'invest2@example.com', '$2b$10$7sNffW1yKmy2o6J4hGZ6CeS4e9v9MIP8Q9wFQxqkbKj6qQp5KJpWO'),
+(NULL,'analyst1', 'Analyst One', 'analyst', 'analyst1@example.com', '$2b$10$3mQhY2rH0N2f9Q5y5yFjAu0E.Yc.QYI.4GH4nqvZB.KlIoYexkx2G'),
+(NULL,'legal1', 'Legal Counsel', 'legal', 'legal1@example.com', '$2b$10$T3n7s7UlSxq2W9F1m8v3GeV.9J9lQY0H8m3pZlFv9ePZkG0qJw3vG');
+
 
 -- Grab their IDs into session variables
 SET @admin = (SELECT id FROM profiles WHERE username='admin' LIMIT 1);
