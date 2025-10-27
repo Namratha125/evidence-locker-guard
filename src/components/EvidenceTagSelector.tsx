@@ -39,7 +39,7 @@ const EvidenceTagSelector = ({ evidenceId, selectedTags, onTagsChange, disabled 
   // load all tags (for the selector)
   const fetchAllTags = async () => {
     try {
-      const res = await fetch(`${API_BASE}/tags`);
+      const res = await fetch(`${API_BASE}/api/tags`);
       if (!res.ok) throw new Error('Failed to load tags');
       const data = await res.json();
       // backend returns array of tags (id, name, color, created_by)
@@ -53,7 +53,7 @@ const EvidenceTagSelector = ({ evidenceId, selectedTags, onTagsChange, disabled 
   const fetchEvidenceTags = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/evidence/${encodeURIComponent(evidenceId)}/tags`);
+      const res = await fetch(`${API_BASE}/api/evidence/${encodeURIComponent(evidenceId)}/tags`);
       if (!res.ok) throw new Error('Failed to load evidence tags');
       const data = await res.json();
       // data is array [{id, name, color}, ...]
@@ -69,7 +69,7 @@ const EvidenceTagSelector = ({ evidenceId, selectedTags, onTagsChange, disabled 
     if (selectedTags.find(t => t.id === tag.id)) return;
 
     try {
-      const res = await fetch(`${API_BASE}/evidence/${encodeURIComponent(evidenceId)}/tags`, {
+      const res = await fetch(`${API_BASE}/api/evidence/${encodeURIComponent(evidenceId)}/tags`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -96,7 +96,7 @@ const EvidenceTagSelector = ({ evidenceId, selectedTags, onTagsChange, disabled 
 
   const handleTagRemove = async (tagId: string) => {
     try {
-      const res = await fetch(`${API_BASE}/evidence/${encodeURIComponent(evidenceId)}/tags/${encodeURIComponent(tagId)}`, {
+      const res = await fetch(`${API_BASE}/api/evidence/${encodeURIComponent(evidenceId)}/tags/${encodeURIComponent(tagId)}`, {
         method: 'DELETE',
         headers: {
           ...(token ? { Authorization: `Bearer ${token}` } : {})

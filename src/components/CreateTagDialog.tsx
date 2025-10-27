@@ -2,9 +2,18 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 interface CreateTagDialogProps {
   open: boolean;
@@ -25,31 +34,26 @@ const CreateTagDialog = ({ open, onOpenChange, onTagCreated }: CreateTagDialogPr
 
     setLoading(true);
     try {
-      const { error, data: tagData } = await supabase
-        .from('tags')
-        .insert({
-          name,
-          color,
-          created_by: user.id
-        })
-        .select('id')
-        .single();
+      // ✅ Get token from localStorage
+      const token = localStorage.getItem("token");
 
-      if (error) throw error;
-
-      // Create audit log
-      await createAuditLog({
-        action: 'create',
-        resource_type: 'tag',
-        resource_id: tagData.id,
-        details: { tag_name: name, color }
+      const res = await fetch(`${API_BASE}/api/tags`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }), // only include if token exists
+        },
+        body: JSON.stringify({ name, color }),
       });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create tag");
 
       toast({
         title: "Success",
         description: "Tag created successfully",
       });
-      
+
       setName('');
       setColor('#3b82f6');
       onOpenChange(false);

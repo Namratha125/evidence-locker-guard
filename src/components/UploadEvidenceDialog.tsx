@@ -34,7 +34,11 @@ interface Case {
   title: string;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_BASE =
+  import.meta.env.VITE_API_URL?.startsWith("http")
+    ? import.meta.env.VITE_API_URL
+    : "http://localhost:5000"; // fallback for safety
+
 
 const UploadEvidenceDialog = ({
   open,
@@ -64,7 +68,7 @@ const UploadEvidenceDialog = ({
 
   const fetchCases = async () => {
     try {
-      const url = new URL(`${API_BASE}/cases`);
+      const url = new URL(`${API_BASE}/api/cases`);
       url.searchParams.set("status", "active");
       const res = await fetch(url.toString(), {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
@@ -154,7 +158,7 @@ const UploadEvidenceDialog = ({
 
       // Send to backend. Backend endpoint must handle file (multipart/form-data),
       // save file (disk / S3), and insert DB record into evidence table.
-      const res = await fetch(`${API_BASE}/evidence/upload`, {
+      const res = await fetch(`${API_BASE}/api/evidence/upload`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

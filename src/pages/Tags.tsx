@@ -46,7 +46,7 @@ const Tags = () => {
   // ✅ Fetch all tags (with evidence count + creator)
   const fetchTags = async () => {
     try {
-      const res = await fetch('http://localhost:5000/tags');
+      const res = await fetch('http://localhost:5000/api/tags');
       if (!res.ok) throw new Error('Failed to fetch tags');
       const data = await res.json();
       setTags(data);
@@ -69,7 +69,7 @@ const Tags = () => {
   // ✅ Delete tag (MySQL API)
   const handleDeleteTag = async (tagId: string) => {
     try {
-      const res = await fetch(`http://localhost:5000/tags/${tagId}`, {
+      const res = await fetch(`http://localhost:5000/api/tags/${tagId}`, {
         method: 'DELETE',
       });
       if (!res.ok) throw new Error('Failed to delete tag');

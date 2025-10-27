@@ -62,7 +62,7 @@ const Evidence = () => {
   // ✅ Fetch all evidence from MySQL
   const fetchEvidence = async () => {
     try {
-      const res = await fetch('http://localhost:5000/evidence');
+      const res = await fetch('http://localhost:5000/api/evidence');
       if (!res.ok) throw new Error('Failed to fetch evidence');
       const data = await res.json();
       setEvidence(data || []);
@@ -80,7 +80,7 @@ const Evidence = () => {
   // ✅ Fetch cases for filters
   const fetchCases = async () => {
     try {
-      const res = await fetch('http://localhost:5000/cases');
+      const res = await fetch('http://localhost:5000/api/cases');
       if (!res.ok) throw new Error('Failed to fetch cases');
       const data = await res.json();
       setCases(data || []);
@@ -92,7 +92,7 @@ const Evidence = () => {
   // ✅ Fetch tags for filters
   const fetchTags = async () => {
     try {
-      const res = await fetch('http://localhost:5000/tags');
+      const res = await fetch('http://localhost:5000/api/tags');
       if (!res.ok) throw new Error('Failed to fetch tags');
       const data = await res.json();
       setTags(data || []);
@@ -158,7 +158,7 @@ const Evidence = () => {
   // ✅ Update evidence status (PUT)
   const updateEvidenceStatus = async (evidenceId: string, newStatus: string) => {
     try {
-      const res = await fetch(`http://localhost:5000/evidence/${evidenceId}/status`, {
+      const res = await fetch(`http://localhost:5000/api/evidence/${evidenceId}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
@@ -195,7 +195,7 @@ const Evidence = () => {
     }
 
     // Example if your backend serves /uploads/files/
-    window.open(`http://localhost:5000/uploads/${item.file_path}`, '_blank');
+    window.open(`http://localhost:5000/api/uploads/${item.file_path}`, '_blank');
   };
 
   if (loading) {

@@ -55,7 +55,7 @@ const ChainOfCustodyDialog = ({ open, onOpenChange, evidenceId }: ChainOfCustody
 
   const fetchCustodyRecords = async () => {
     try {
-      const res = await fetch(`${API_BASE}/evidence/${encodeURIComponent(evidenceId)}/custody`);
+      const res = await fetch(`${API_BASE}/api/evidence/${encodeURIComponent(evidenceId)}/custody`);
       if (!res.ok) {
         const txt = await res.text();
         throw new Error(txt || 'Failed to fetch custody records');
@@ -84,7 +84,7 @@ const ChainOfCustodyDialog = ({ open, onOpenChange, evidenceId }: ChainOfCustody
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch(`${API_BASE}/profiles`);
+      const res = await fetch(`${API_BASE}/api/profiles`);
       if (!res.ok) {
         const txt = await res.text();
         throw new Error(txt || 'Failed to fetch users');
@@ -124,7 +124,7 @@ const ChainOfCustodyDialog = ({ open, onOpenChange, evidenceId }: ChainOfCustody
         notes: notes || null,
       };
 
-      const res = await fetch(`${API_BASE}/chain_of_custody`, {
+      const res = await fetch(`${API_BASE}/api/chain_of_custody`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
