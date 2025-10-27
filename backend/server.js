@@ -430,16 +430,36 @@ router.get("/cases", async (req, res) => {
 });
 
 // Get case details
+// Get full case details (for CaseDetails.tsx)
 router.get("/cases/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const [rows] = await db.query("SELECT id, case_number, title FROM cases WHERE id = ?", [id]);
+    const [rows] = await db.query(`
+      SELECT 
+        id,
+        case_number,
+        title,
+        description,
+        priority,
+        status,
+        findings,
+        due_date,
+        created_by,
+        assigned_to,
+        lead_investigator_id,
+        created_at,
+        updated_at
+      FROM cases
+      WHERE id = ?
+    `, [id]);
+
     res.json(rows[0] || null);
   } catch (err) {
     console.error("Error fetching case", err);
     res.status(500).json({ message: "Failed to fetch case" });
   }
 });
+
 
 // Create a new case
 router.post("/cases", async (req, res) => {
@@ -689,6 +709,131 @@ router.get("/dashboard/stats", async (req, res) => {
     res.status(500).json({ message: "Failed to load dashboard stats" });
   }
 });
+
+// Compatibility endpoints for old Lovable frontend (keeps /auth/* working)
+// Place this before `app.use("/api", router);`
+
+// Signup - maps to existing /users logic
+router.post("/auth/signup", async (req, res) => {
+  // Map front-end field names if they differ (frontend may send fullName instead of full_name)
+  const email = req.body.email;
+  const password = req.body.password;
+  const username = req.body.username;
+  const role = req.body.role;
+  const badge_number = req.body.badgeNumber || req.body.badge_number || null;
+  const department = req.body.department || null;
+  const full_name = req.body.fullName || req.body.full_name || username;
+
+  const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || "10", 10);
+  if (!email || !password || !username) {
+    return res.status(400).json({ message: "Email, password, and username are required" });
+  }
+
+  try {
+    const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
+    const id = uuidv4();
+
+    await db.query(
+      `INSERT INTO profiles (id, username, full_name, role, badge_number, department, email, password, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+      [id, username, full_name || username, role || "analyst", badge_number, department || null, email, hashedPassword]
+    );
+
+    return res.status(201).json({ message: "User created successfully", id });
+  } catch (err) {
+    console.error("Compat /auth/signup error:", err);
+    if (err && err.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ message: "Email or username already exists" });
+    }
+    return res.status(500).json({ message: "Failed to create user" });
+  }
+});
+
+// Login compatibility - maps to /login
+router.post("/auth/login", async (req, res) => {
+  const email = req.body.email;
+  const password = req.body.password;
+  if (!email || !password) return res.status(400).json({ message: "Email and password are required" });
+
+  try {
+    const [rows] = await db.query("SELECT * FROM profiles WHERE email = ?", [email]);
+    if (!rows || rows.length === 0) return res.status(401).json({ message: "Invalid credentials" });
+
+    const user = rows[0];
+    const isValid = await bcrypt.compare(password, user.password);
+    if (!isValid) return res.status(401).json({ message: "Invalid credentials" });
+
+    const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET || "secret_key", { expiresIn: "1h" });
+    const { password: _p, ...userWithoutPassword } = user;
+    return res.json({ message: "Login successful", user: userWithoutPassword, token });
+  } catch (err) {
+    console.error("Compat /auth/login error:", err);
+    return res.status(500).json({ message: "Login failed" });
+  }
+});
+
+// --- Compatibility top-level auth routes (for frontend calling /auth/* without /api) ---
+// Place this BEFORE `app.use("/api", router);`
+
+app.post('/auth/signup', async (req, res) => {
+  console.log('TOP-LEVEL /auth/signup body:', req.body);
+  // map front-end fields to DB fields
+  const email = req.body.email;
+  const password = req.body.password;
+  const username = req.body.username;
+  const role = req.body.role;
+  const badge_number = req.body.badgeNumber || req.body.badge_number || null;
+  const department = req.body.department || null;
+  const full_name = req.body.fullName || req.body.full_name || username;
+
+  const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '10', 10);
+  if (!email || !password || !username) {
+    return res.status(400).json({ message: 'Email, password, and username are required' });
+  }
+
+  try {
+    const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
+    const id = uuidv4();
+
+    await db.query(
+      `INSERT INTO profiles (id, username, full_name, role, badge_number, department, email, password, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+      [id, username, full_name || username, role || 'analyst', badge_number, department || null, email, hashedPassword]
+    );
+
+    return res.status(201).json({ message: 'User created successfully', id });
+  } catch (err) {
+    console.error('TOP-LEVEL /auth/signup error:', err);
+    if (err && err.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ message: 'Email or username already exists' });
+    }
+    return res.status(500).json({ message: 'Failed to create user' });
+  }
+});
+
+app.post('/auth/login', async (req, res) => {
+  console.log('TOP-LEVEL /auth/login body:', req.body);
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ message: 'Email and password are required' });
+
+  try {
+    const [rows] = await db.query('SELECT * FROM profiles WHERE email = ?', [email]);
+    if (!rows || rows.length === 0) return res.status(401).json({ message: 'Invalid credentials' });
+
+    const user = rows[0];
+    const isValid = await bcrypt.compare(password, user.password);
+    if (!isValid) return res.status(401).json({ message: 'Invalid credentials' });
+
+    const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET || 'secret_key', { expiresIn: '1h' });
+    const { password: _p, ...userWithoutPassword } = user;
+    return res.json({ message: 'Login successful', user: userWithoutPassword, token });
+  } catch (err) {
+    console.error('TOP-LEVEL /auth/login error:', err);
+    return res.status(500).json({ message: 'Login failed' });
+  }
+});
+
+
 app.use("/api", router);
 // -----------------------
 // Start server

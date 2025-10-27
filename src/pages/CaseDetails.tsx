@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +14,6 @@ import {
   Calendar, 
   User, 
   FileText, 
-  Download,
   Eye,
   Link2
 } from 'lucide-react';
@@ -74,85 +74,59 @@ const CaseDetails = () => {
 
   const fetchCaseData = async () => {
     try {
-      const { data, error } = await supabase
-        .from('cases')
-        .select('*')
-        .eq('id', id)
-        .maybeSingle();
+      const res = await axios.get(`/api/cases/${id}`);
+      const caseInfo = res.data;
 
-      if (error) throw error;
-      
-      let caseWithProfiles: any = data;
-      
-      // Fetch user profiles separately if case exists
-      if (data) {
-        const userIds = [data.created_by, data.assigned_to, data.lead_investigator_id].filter(Boolean);
-        
-        if (userIds.length > 0) {
-          const { data: profilesData } = await supabase
-            .from('profiles')
-            .select('id, full_name')
-            .in('id', userIds);
+      // Fetch related profiles
+      const userIds = [caseInfo.created_by, caseInfo.assigned_to, caseInfo.lead_investigator_id].filter(Boolean);
+      let profilesMap = new Map();
 
-          const profilesMap = new Map(profilesData?.map(p => [p.id, p]) || []);
-          
-          caseWithProfiles = {
-            ...data,
-            creator: profilesMap.get(data.created_by),
-            assignee: data.assigned_to ? profilesMap.get(data.assigned_to) : null,
-            lead_investigator: data.lead_investigator_id ? profilesMap.get(data.lead_investigator_id) : null
-          };
-        }
+      if (userIds.length > 0) {
+        const profileRes = await axios.post('/api/profiles/by-ids', { ids: userIds });
+        profilesMap = new Map(profileRes.data.map((p: any) => [p.id, p]));
       }
+
+      const caseWithProfiles = {
+        ...caseInfo,
+        creator: profilesMap.get(caseInfo.created_by),
+        assignee: caseInfo.assigned_to ? profilesMap.get(caseInfo.assigned_to) : null,
+        lead_investigator: caseInfo.lead_investigator_id ? profilesMap.get(caseInfo.lead_investigator_id) : null
+      };
 
       setCaseData(caseWithProfiles);
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: "Failed to fetch case details: " + error.message,
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to fetch case details: ' + error.message,
+        variant: 'destructive',
       });
     }
   };
 
   const fetchEvidence = async () => {
     try {
-      const { data, error } = await supabase
-        .from('evidence')
-        .select('*')
-        .eq('case_id', id);
+      const res = await axios.get(`/api/evidence/case/${id}`);
+      const evidenceData = res.data;
 
-      if (error) throw error;
-      
-      // Fetch uploader profiles separately if evidence exists
-      if (data && data.length > 0) {
-        const uploaderIds = [...new Set(data.map(e => e.uploaded_by).filter(Boolean))];
-        
-        if (uploaderIds.length > 0) {
-          const { data: profilesData } = await supabase
-            .from('profiles')
-            .select('id, full_name')
-            .in('id', uploaderIds);
+      const uploaderIds = [...new Set(evidenceData.map((e: any) => e.uploaded_by).filter(Boolean))];
+      let profilesMap = new Map();
 
-          const profilesMap = new Map(profilesData?.map(p => [p.id, p]) || []);
-          
-          const evidenceWithProfiles = data.map((evidence: any) => ({
-            ...evidence,
-            uploader: profilesMap.get(evidence.uploaded_by)
-          }));
-          
-          setEvidence(evidenceWithProfiles);
-        } else {
-          setEvidence(data);
-        }
-      } else {
-        setEvidence([]);
+      if (uploaderIds.length > 0) {
+        const profileRes = await axios.post('/api/profiles/by-ids', { ids: uploaderIds });
+        profilesMap = new Map(profileRes.data.map((p: any) => [p.id, p]));
       }
+
+      const evidenceWithProfiles = evidenceData.map((e: any) => ({
+        ...e,
+        uploader: profilesMap.get(e.uploaded_by)
+      }));
+
+      setEvidence(evidenceWithProfiles);
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: "Failed to fetch evidence: " + error.message,
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to fetch evidence: ' + error.message,
+        variant: 'destructive',
       });
     } finally {
       setLoading(false);
@@ -234,6 +208,7 @@ const CaseDetails = () => {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" onClick={() => navigate('/cases')}>
@@ -253,9 +228,10 @@ const CaseDetails = () => {
         )}
       </div>
 
+      {/* Case Info & Evidence */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          {/* Case Information */}
+          {/* Case Info */}
           <Card>
             <CardHeader>
               <CardTitle>Case Information</CardTitle>
@@ -287,11 +263,13 @@ const CaseDetails = () => {
                 </div>
                 
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-sm">
-                    <User className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Created by:</span>
-                    <span>{caseData.creator?.full_name}</span>
-                  </div>
+                  {caseData.creator && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-muted-foreground">Created by:</span>
+                      <span>{caseData.creator.full_name}</span>
+                    </div>
+                  )}
                   {caseData.assignee && (
                     <div className="flex items-center gap-2 text-sm">
                       <User className="h-4 w-4 text-muted-foreground" />
@@ -338,9 +316,7 @@ const CaseDetails = () => {
                 <FileText className="h-5 w-5" />
                 Evidence ({evidence.length})
               </CardTitle>
-              <CardDescription>
-                Digital evidence associated with this case
-              </CardDescription>
+              <CardDescription>Digital evidence associated with this case</CardDescription>
             </CardHeader>
             <CardContent>
               {evidence.length === 0 ? (
@@ -354,30 +330,18 @@ const CaseDetails = () => {
                       <div className="flex-1">
                         <h4 className="font-medium">{item.title}</h4>
                         <div className="text-sm text-muted-foreground mt-1">
-                          {item.file_name && (
-                            <span>{item.file_name} • </span>
-                          )}
-                          {item.file_type && (
-                            <span>{item.file_type.toUpperCase()} • </span>
-                          )}
+                          {item.file_name && <span>{item.file_name} • </span>}
+                          {item.file_type && <span>{item.file_type.toUpperCase()} • </span>}
                           <span>{formatFileSize(item.file_size)}</span>
                           <span> • Uploaded by {item.uploader?.full_name}</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge variant="outline">{item.status}</Badge>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleChainOfCustody(item.id)}
-                        >
+                        <Button variant="ghost" size="sm" onClick={() => handleChainOfCustody(item.id)}>
                           <Link2 className="h-4 w-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleViewEvidence(item.id)}
-                        >
+                        <Button variant="ghost" size="sm" onClick={() => handleViewEvidence(item.id)}>
                           <Eye className="h-4 w-4" />
                         </Button>
                       </div>
@@ -389,12 +353,13 @@ const CaseDetails = () => {
           </Card>
         </div>
 
+        {/* Comments Section */}
         <div className="space-y-6">
-          {/* Comments */}
           <CommentsSection caseId={caseData.id} />
         </div>
       </div>
 
+      {/* Dialogs */}
       <EditCaseDialog
         case_={caseData as any}
         open={editDialogOpen}
