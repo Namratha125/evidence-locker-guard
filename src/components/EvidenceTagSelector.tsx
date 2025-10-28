@@ -28,28 +28,28 @@ const EvidenceTagSelector = ({ evidenceId, selectedTags, onTagsChange, disabled 
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
-  const { token } = useAuth() as any; // optional token for auth
+  const { token } = useAuth() as any; 
 
   useEffect(() => {
     fetchAllTags();
     fetchEvidenceTags();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [evidenceId]);
 
-  // load all tags (for the selector)
+  
   const fetchAllTags = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/tags`);
       if (!res.ok) throw new Error('Failed to load tags');
       const data = await res.json();
-      // backend returns array of tags (id, name, color, created_by)
+      
       setAvailableTags(data || []);
     } catch (err: any) {
       toast({ title: 'Error', description: 'Failed to fetch tags: ' + (err.message || err), variant: 'destructive' });
     }
   };
 
-  // load tags currently attached to this evidence
+  
   const fetchEvidenceTags = async () => {
     setLoading(true);
     try {

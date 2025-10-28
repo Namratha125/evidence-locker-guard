@@ -20,7 +20,7 @@ const EditTagDialog = ({ tag, open, onOpenChange, onTagUpdated }: EditTagDialogP
   const [color, setColor] = useState('#3b82f6');
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-  const { user, token } = useAuth() as any; // adjust if useAuth shape differs
+  const { user, token } = useAuth() as any; 
 
   useEffect(() => {
     if (tag) {

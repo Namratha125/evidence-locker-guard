@@ -78,7 +78,7 @@ const CreateCaseDialog = ({ open, onOpenChange, onCaseCreated }: CreateCaseDialo
           })
         });
       } catch (err) {
-        // non-blocking: audit failure shouldn't block UI
+        
         console.warn('audit log failed', err);
       }
 

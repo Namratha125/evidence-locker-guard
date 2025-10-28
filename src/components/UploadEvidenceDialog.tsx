@@ -37,7 +37,7 @@ interface Case {
 const API_BASE =
   import.meta.env.VITE_API_URL?.startsWith("http")
     ? import.meta.env.VITE_API_URL
-    : "http://localhost:5000"; // fallback for safety
+    : "http://localhost:5000"; 
 
 
 const UploadEvidenceDialog = ({
@@ -63,7 +63,7 @@ const UploadEvidenceDialog = ({
     if (open) {
       fetchCases();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    
   }, [open]);
 
   const fetchCases = async () => {
@@ -137,10 +137,9 @@ const UploadEvidenceDialog = ({
 
     setLoading(true);
     try {
-      // compute hash
       const hashValue = await calculateFileHash(file);
 
-      // prepare multipart form data
+      
       const fd = new FormData();
       fd.append("file", file);
       fd.append("title", formData.title);
@@ -156,13 +155,10 @@ const UploadEvidenceDialog = ({
       fd.append("uploaded_by", user.id);
       fd.append("status", "pending");
 
-      // Send to backend. Backend endpoint must handle file (multipart/form-data),
-      // save file (disk / S3), and insert DB record into evidence table.
       const res = await fetch(`${API_BASE}/api/evidence/upload`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
-          // DO NOT set Content-Type here — browser will set the multipart boundary
         },
         body: fd,
       });
@@ -171,10 +167,6 @@ const UploadEvidenceDialog = ({
       if (!res.ok) {
         throw new Error(resJson.message || res.statusText || "Upload failed");
       }
-
-      // optional: create audit log via backend endpoint (server should create audit itself too)
-      // If you have an endpoint for audit logs: POST /audit-logs or similar
-      // await fetch(`${API_BASE}/audit-logs`, { method: 'POST', headers: {...}, body: JSON.stringify({...}) });
 
       toast({
         title: "Success",

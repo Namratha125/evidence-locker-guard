@@ -34,14 +34,13 @@ const CreateTagDialog = ({ open, onOpenChange, onTagCreated }: CreateTagDialogPr
 
     setLoading(true);
     try {
-      // ✅ Get token from localStorage
       const token = localStorage.getItem("token");
 
       const res = await fetch(`${API_BASE}/api/tags`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token && { Authorization: `Bearer ${token}` }), // only include if token exists
+          ...(token && { Authorization: `Bearer ${token}` }), 
         },
         body: JSON.stringify({ name, color }),
       });

@@ -140,7 +140,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 // Replace fetchProfile with this
 const fetchProfile = async (id: string, jwt?: string) => {
   try {
-    const url = `${API_BASE}/api/profile/${id}`; // note: backend top-level route is /profile/:id (no /api prefix)
+    const url = `${API_BASE}/api/profile/${id}`;
     console.log("FETCH PROFILE ->", url);
 
     const res = await fetch(url, {

@@ -42,7 +42,7 @@ const ChainOfCustodyDialog = ({ open, onOpenChange, evidenceId }: ChainOfCustody
   const [location, setLocation] = useState('');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
-  const { user } = useAuth(); // expects { id, ... }
+  const { user } = useAuth(); 
   const { toast } = useToast();
 
   useEffect(() => {
@@ -50,7 +50,7 @@ const ChainOfCustodyDialog = ({ open, onOpenChange, evidenceId }: ChainOfCustody
       fetchCustodyRecords();
       fetchUsers();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [open, evidenceId]);
 
   const fetchCustodyRecords = async () => {
@@ -61,7 +61,7 @@ const ChainOfCustodyDialog = ({ open, onOpenChange, evidenceId }: ChainOfCustody
         throw new Error(txt || 'Failed to fetch custody records');
       }
       const data = await res.json();
-      // Expecting array of records with from_user_name and to_user_name or nested objects
+  
       const mapped: CustodyRecord[] = data.map((r: any) => ({
         id: r.id,
         action: r.action,

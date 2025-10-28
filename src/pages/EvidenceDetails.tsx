@@ -62,7 +62,7 @@ const EvidenceDetails = () => {
   const [custodyDialogOpen, setCustodyDialogOpen] = useState(false);
   const [evidenceTags, setEvidenceTags] = useState<any[]>([]);
 
-  const API_BASE = "http://localhost:5000"; // ✅ your backend base URL
+  const API_BASE = "http://localhost:5000"; 
 
   useEffect(() => {
     if (id) fetchEvidenceData();
@@ -70,16 +70,16 @@ const EvidenceDetails = () => {
 
   const fetchEvidenceData = async () => {
     try {
-      const res = await fetch(`${API_BASE}/evidence/${id}`);
+      const res = await fetch(`${API_BASE}/api/evidence/${id}`);
       if (!res.ok) throw new Error("Failed to fetch evidence");
 
       const data = await res.json();
 
       // Fetch related info
       const [caseRes, uploaderRes, tagsRes] = await Promise.all([
-        fetch(`${API_BASE}/cases/${data.case_id}`),
-        fetch(`${API_BASE}/profiles/${data.uploaded_by}`),
-        fetch(`${API_BASE}/evidence/${id}/tags`),
+        fetch(`${API_BASE}/api/cases/${data.case_id}`),
+        fetch(`${API_BASE}/api/profiles/${data.uploaded_by}`),
+        fetch(`${API_BASE}/api/evidence/${id}/tags`),
       ]);
 
       const [caseData, uploaderData, tagsData] = await Promise.all([

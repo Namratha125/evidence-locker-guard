@@ -1,4 +1,3 @@
-// src/types.ts
 export type UserRole = 'admin' | 'investigator' | 'analyst' | 'legal';
 
 export interface Profile {

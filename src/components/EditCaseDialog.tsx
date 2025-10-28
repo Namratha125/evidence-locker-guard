@@ -54,7 +54,7 @@ export default function EditCaseDialog({ case_, open, onOpenChange, onUpdate }: 
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-  const { user, token } = useAuth() as any; // update if your auth shape differs
+  const { user, token } = useAuth() as any; 
 
   useEffect(() => {
     if (case_) {
@@ -77,7 +77,7 @@ export default function EditCaseDialog({ case_, open, onOpenChange, onUpdate }: 
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch(`${API_BASE}/profiles`);
+      const res = await fetch(`${API_BASE}/api/profiles`);
       if (!res.ok) throw new Error('Failed to load users');
       const data = await res.json();
       // backend returns [{id, full_name}, ...]

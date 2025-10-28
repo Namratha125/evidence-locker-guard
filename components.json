@@ -8,7 +8,10 @@
     "css": "src/index.css",
     "baseColor": "slate",
     "cssVariables": true,
-    "prefix": ""
+    "prefix": "",
+    "css.lint.unknownAtRules": "ignore",
+    "postcss.validate": true
+
   },
   "aliases": {
     "components": "@/components",

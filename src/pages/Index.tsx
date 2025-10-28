@@ -23,7 +23,7 @@ const Index = () => {
   const [loading, setLoading] = useState(true);
   const { profile } = useAuth();
 
-  const API_BASE = "http://localhost:5000"; // ✅ Your backend base URL
+  const API_BASE = "http://localhost:5000";
 
   useEffect(() => {
     fetchDashboardData();
