@@ -94,7 +94,7 @@ export default function Cases() {
 
   const fetchUsers = async () => {
     try {
-      const res = await axios.get('/api/users');
+      const res = await axios.get('/api/profiles');
       setUsers(res.data || []);
     } catch (error) {
       console.error('Error fetching users:', error);

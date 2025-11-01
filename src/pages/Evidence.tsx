@@ -36,6 +36,38 @@ interface Evidence {
   }[];
 }
 
+// Base API URL
+const API_BASE = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/+$/, "");
+
+/**
+ * Build a public URL for an evidence file.
+ * Handles multiple shapes of file_path stored in DB.
+ *
+ * filePath may be:
+ * - "uploads/<caseId>/<filename>"
+ * - "/uploads/<caseId>/<filename>"
+ * - "mall_cam1.mp4" (only filename)
+ * - already a full URL "https://..."
+ *
+ * If only filename is present, we use caseId + fileName fallback.
+ */
+function fileUrlFromEvidence(filePath?: string | null, opts?: { caseId?: string | null; fileName?: string | null }) {
+  if (!filePath && !opts?.fileName) return null;
+
+  // Already a full URL → return as-is
+  if (filePath && /^https?:\/\//.test(filePath)) return filePath;
+
+  // If the path already contains 'uploads/', just prefix API base
+  if (filePath && /uploads\//.test(filePath)) {
+    const normalized = filePath.replace(/^\/+/, "");
+    return `${API_BASE}/api/${normalized}`;
+  }
+
+  // ✅ Force fallback to uploads/general if nothing else matches
+  const fileName = opts?.fileName || filePath;
+  return `${API_BASE}/api/uploads/general/${fileName}`;
+}
+
 const Evidence = () => {
   const navigate = useNavigate();
   const [evidence, setEvidence] = useState<Evidence[]>([]);
@@ -59,10 +91,10 @@ const Evidence = () => {
     setFilteredEvidence(evidence);
   }, [evidence]);
 
-  // ✅ Fetch all evidence from MySQL
+  // Fetch all evidence
   const fetchEvidence = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/evidence');
+      const res = await fetch(`${API_BASE}/api/evidence`);
       if (!res.ok) throw new Error('Failed to fetch evidence');
       const data = await res.json();
       setEvidence(data || []);
@@ -77,10 +109,10 @@ const Evidence = () => {
     }
   };
 
-  // ✅ Fetch cases for filters
+  // Fetch cases
   const fetchCases = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/cases');
+      const res = await fetch(`${API_BASE}/api/cases`);
       if (!res.ok) throw new Error('Failed to fetch cases');
       const data = await res.json();
       setCases(data || []);
@@ -89,16 +121,35 @@ const Evidence = () => {
     }
   };
 
-  // ✅ Fetch tags for filters
+  // Fetch tags
   const fetchTags = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/tags');
+      const res = await fetch(`${API_BASE}/api/tags`);
       if (!res.ok) throw new Error('Failed to fetch tags');
       const data = await res.json();
       setTags(data || []);
     } catch (error) {
       console.error('Error fetching tags:', error);
     }
+  };
+
+  // Copy direct file link to clipboard
+  const copyEvidenceLink = async (item: Evidence) => {
+    const url = fileUrlFromEvidence(item.file_path, { caseId: item.case_id, fileName: item.file_name });
+    if (!url) { toast({ title: "Error", description: "No file available", variant: "destructive" }); return; }
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({ title: "Link copied", description: "File URL copied to clipboard" });
+    } catch (err: any) {
+      toast({ title: "Error", description: "Failed to copy link: " + (err?.message || err), variant: "destructive" });
+    }
+  };
+
+  // Open file in new tab (view or download depending on headers)
+  const viewEvidence = (item: Evidence) => {
+    const url = fileUrlFromEvidence(item.file_path, { caseId: item.case_id, fileName: item.file_name });
+    if (!url) { toast({ title: "Error", description: "No file available", variant: "destructive" }); return; }
+    window.open(url, "_blank", "noopener");
   };
 
   const handleAdvancedSearch = (filters: any) => {
@@ -155,10 +206,10 @@ const Evidence = () => {
     }
   };
 
-  // ✅ Update evidence status (PUT)
+  // Update evidence status
   const updateEvidenceStatus = async (evidenceId: string, newStatus: string) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/evidence/${evidenceId}/status`, {
+      const res = await fetch(`${API_BASE}/api/evidence/${evidenceId}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
@@ -183,19 +234,14 @@ const Evidence = () => {
 
   const getFileTypeIcon = (fileType: string) => <FileText className="h-4 w-4" />;
 
-  // ✅ Download (handled by backend serving file URLs)
-  const handleDownload = async (item: Evidence) => {
-    if (!item.file_path) {
-      toast({
-        title: "Error",
-        description: "File not found for this evidence",
-        variant: "destructive",
-      });
+  // Download / open
+  const handleDownload = (item: Evidence) => {
+    const url = fileUrlFromEvidence(item.file_path, { caseId: item.case_id, fileName: item.file_name });
+    if (!url) {
+      toast({ title: "Error", description: "File not found for this evidence", variant: "destructive" });
       return;
     }
-
-    // Example if your backend serves /uploads/files/
-    window.open(`http://localhost:5000/api/uploads/${item.file_path}`, '_blank');
+    window.open(url, "_blank", "noopener");
   };
 
   if (loading) {
@@ -300,16 +346,22 @@ const Evidence = () => {
                         <SelectItem value="archived">Archived</SelectItem>
                       </SelectContent>
                     </Select>
+
+                    {/* Chain of custody (opens dialog) */}
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() => {
+                        console.log("Clicked evidence:", item);
                         setSelectedEvidenceId(item.id);
                         setCustodyDialogOpen(true);
                       }}
                     >
                       <Link2 className="h-4 w-4" />
                     </Button>
+
+                    {/* View / open file in new tab */}
+                    {/* Open evidence details inside the app (like Cases) */}
                     <Button
                       size="sm"
                       variant="outline"
@@ -317,6 +369,9 @@ const Evidence = () => {
                     >
                       <Eye className="h-4 w-4" />
                     </Button>
+
+
+                    {/* Download / open file */}
                     <Button
                       size="sm"
                       variant="outline"
@@ -324,6 +379,7 @@ const Evidence = () => {
                     >
                       <Download className="h-4 w-4" />
                     </Button>
+
                   </div>
                 </div>
               </CardHeader>

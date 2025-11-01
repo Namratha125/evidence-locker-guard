@@ -38,7 +38,7 @@ const Audit = () => {
   const fetchAuditLogs = async () => {
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(`${API_BASE}/api/audit-logs`, {
+      const res = await fetch(`${API_BASE}/api/audit_logs`, {
         headers: {
           "Content-Type": "application/json",
           ...(token && { Authorization: `Bearer ${token}` }),

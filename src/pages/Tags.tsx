@@ -41,6 +41,27 @@ const Tags = () => {
 
   useEffect(() => {
     fetchTags();
+    
+    // Refresh tags when page becomes visible again
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchTags();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Periodic refresh every 30 seconds if page is visible
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchTags();
+      }
+    }, 30000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearInterval(interval);
+    };
   }, []);
 
   // ✅ Fetch all tags (with evidence count + creator)
@@ -58,6 +79,8 @@ const Tags = () => {
       });
     } finally {
       setLoading(false);
+
+      
     }
   };
 

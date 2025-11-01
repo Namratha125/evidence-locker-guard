@@ -205,12 +205,15 @@ const ChainOfCustodyDialog = ({ open, onOpenChange, evidenceId }: ChainOfCustody
 
                   <div className="space-y-2">
                     <Label htmlFor="toUser">To User (Optional)</Label>
-                    <Select value={toUserId} onValueChange={setToUserId}>
+                    <Select
+                      value={toUserId || "none"}
+                      onValueChange={(val) => setToUserId(val === "none" ? "" : val)}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Select user" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">— None —</SelectItem>
+                        <SelectItem value="none">— None —</SelectItem>
                         {users.map((u) => (
                           <SelectItem key={u.id} value={u.id}>
                             {u.full_name}
@@ -219,6 +222,7 @@ const ChainOfCustodyDialog = ({ open, onOpenChange, evidenceId }: ChainOfCustody
                       </SelectContent>
                     </Select>
                   </div>
+
                 </div>
 
                 <div className="space-y-2">

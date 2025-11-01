@@ -15,12 +15,42 @@ const { v4: uuidv4 } = pkg;
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+const __filename = fileURLToPath(import.meta.url);
+
+const __dirname = path.resolve();
+
+// ✅ Serve static files correctly whether you run from root or backend
+const uploadsDir = path.join(__dirname, "uploads");
+app.use("/uploads", express.static(uploadsDir));
+
+console.log("Serving uploads from:", uploadsDir);
+
+
+// Fallback route for prefixed files like "1761807101279_S002_1.jpg"
+app.get('/api/uploads/:folder/:file', (req, res) => {
+  const { folder, file } = req.params;
+  const dir = path.join(__dirname, 'uploads', folder);
+
+  if (!fs.existsSync(dir)) {
+    return res.status(404).send('Folder not found');
+  }
+
+  // Try to find a file that ends with the requested name
+  const match = fs.readdirSync(dir).find(f => f.endsWith(file));
+  if (!match) {
+    return res.status(404).send('File not found');
+  }
+
+  const fullPath = path.join(dir, match);
+  res.sendFile(fullPath);
+});
+
+
 app.use(
   helmet.contentSecurityPolicy({
     useDefaults: true,
@@ -35,12 +65,15 @@ app.use(
 // --------------------------
 // Ensure uploads dir exists
 // --------------------------
-const UPLOADS_DIR = path.join(__dirname, "uploads");
-fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
+// Example log to verify path
+console.log("Serving uploads from:", path.join(__dirname, "backend/uploads"));
 // ---------------------------
 // Multer storage configuration
 // ---------------------------
+// ✅ Define upload directory globally before using in multer
+const UPLOADS_DIR = path.join(__dirname, "uploads");
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     // store under uploads/<case_id> if provided, otherwise uploads/general
@@ -78,7 +111,7 @@ try {
 
 
 // Serve uploaded files
-router.use("/uploads", express.static(UPLOADS_DIR));
+
 
 // ---------------------------------------
 // ROUTES
@@ -125,6 +158,57 @@ router.get("/evidence", async (req, res) => {
     res.status(500).json({ message: "Failed to fetch evidence" });
   }
 });
+
+// alias: /api/users → /api/profiles
+router.get("/users", async (req, res) => {
+  try {
+    const [rows] = await db.query("SELECT id, full_name, email, role FROM profiles");
+    res.json(rows);
+  } catch (err) {
+    console.error("Error fetching users:", err);
+    res.status(500).json({ message: "Failed to fetch users" });
+  }
+});
+
+// /api/profiles/by-ids
+router.post("/profiles/by-ids", async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) return res.json([]);
+    const [rows] = await db.query("SELECT id, full_name FROM profiles WHERE id IN (?)", [ids]);
+    res.json(rows);
+  } catch (err) {
+    console.error("Error fetching profiles by IDs:", err);
+    res.status(500).json({ message: "Failed to fetch profiles by IDs" });
+  }
+});
+
+// /api/evidence/case/:id
+router.get("/evidence/case/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [rows] = await db.query("SELECT * FROM evidence WHERE case_id = ?", [id]);
+    res.json(rows);
+  } catch (err) {
+    console.error("Error fetching evidence for case:", err);
+    res.status(500).json({ message: "Failed to fetch evidence for case" });
+  }
+});
+
+// /api/cases/:id/status
+router.put("/cases/:id/status", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    if (!status) return res.status(400).json({ message: "Missing status field" });
+    await db.query("UPDATE cases SET status = ? WHERE id = ?", [status, id]);
+    res.json({ message: "Case status updated successfully" });
+  } catch (err) {
+    console.error("Error updating case status:", err);
+    res.status(500).json({ message: "Failed to update case status" });
+  }
+});
+
 
 // PUT update evidence status
 router.put("/evidence/:id/status", async (req, res) => {
@@ -192,7 +276,7 @@ router.post("/evidence/upload", upload.single("file"), async (req, res) => {
     }
 
     const id = uuidv4();
-    const filePathRelative = file ? path.join('uploads', finalCaseId, file.filename) : null;
+    const filePathRelative = file ? `uploads/${finalCaseId}/${file.filename}` : null;
     const fileType = (file && file.mimetype) || null;
     const fileSize = (file && file.size) || null;
     const fileName = (file && file.originalname) || null;
@@ -326,16 +410,38 @@ router.get("/evidence/:id/tags", async (req, res) => {
 
 router.get("/tags", async (req, res) => {
   try {
+    // First get all tags with their creators
     const [tags] = await db.query(`
-      SELECT t.*, p.full_name AS created_by_name,
-        (SELECT COUNT(*) FROM evidence_tags et WHERE et.tag_id = t.id) AS evidence_count
+      SELECT 
+        t.id,
+        t.name,
+        t.color,
+        t.created_at,
+        p.full_name AS created_by_name,
+        (
+          SELECT COUNT(*)
+          FROM evidence_tags et
+          WHERE et.tag_id = t.id
+        ) as evidence_count
       FROM tags t
       LEFT JOIN profiles p ON t.created_by = p.id
-      ORDER BY t.created_at DESC
+      ORDER BY t.name ASC
     `);
-    res.json(tags.map(tag => ({ ...tag, created_by: { full_name: tag.created_by_name } })));
+
+    console.log('Tags with counts:', tags); // Debug log
+
+    const response = tags.map(tag => ({
+      id: tag.id,
+      name: tag.name,
+      color: tag.color,
+      created_at: tag.created_at,
+      created_by: { full_name: tag.created_by_name },
+      evidence_count: parseInt(tag.evidence_count || 0)
+    }));
+
+    res.json(response);
   } catch (err) {
-    console.error(err);
+    console.error('Error fetching tags:', err);
     res.status(500).json({ error: "Database error fetching tags" });
   }
 });
@@ -347,6 +453,14 @@ router.post("/tags", async (req, res) => {
 
     const id = uuidv4();
     await db.query(`INSERT INTO tags (id, name, color, created_by, created_at) VALUES (?, ?, ?, ?, NOW())`, [id, name, color || "#3b82f6", created_by]);
+    
+    // Create audit log for tag creation
+    await db.query(
+      `INSERT INTO audit_logs (id, user_id, action, resource_type, resource_id, details, timestamp)
+       VALUES (UUID(), ?, 'create', 'tag', ?, ?, NOW())`,
+      [created_by, id, JSON.stringify({ name, color })]
+    );
+
     const [rows] = await db.query(
       `SELECT t.id, t.name, t.color, t.created_at, p.full_name AS created_by_name
        FROM tags t
@@ -686,6 +800,50 @@ router.post("/audit_logs", async (req, res) => {
   }
 });
 
+// ================================
+// ✅ GET /api/audit_logs
+// ================================
+router.get("/audit_logs", async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT al.id, al.user_id, al.action, al.resource_type, al.resource_id, al.details, al.timestamp,
+             p.full_name AS user_full_name, p.username AS user_username
+      FROM audit_logs al
+      LEFT JOIN profiles p ON p.id = al.user_id
+      ORDER BY al.timestamp DESC
+      LIMIT 100
+    `);
+
+    const logs = rows.map(r => {
+      let details = r.details;
+      try {
+        if (typeof details === "string") details = JSON.parse(details);
+      } catch {
+        // leave details as is
+      }
+
+      return {
+        id: r.id,
+        user_id: r.user_id,
+        action: r.action,
+        resource_type: r.resource_type,
+        resource_id: r.resource_id,
+        details,
+        timestamp: r.timestamp,
+        user: r.user_full_name
+          ? { full_name: r.user_full_name, username: r.user_username }
+          : null,
+      };
+    });
+
+    res.json(logs);
+  } catch (err) {
+    console.error("Error fetching audit logs:", err);
+    res.status(500).json({ message: "Failed to fetch audit logs" });
+  }
+});
+
+
 // --------------------
 // Dashboard stats
 // --------------------
@@ -811,6 +969,201 @@ app.post('/auth/signup', async (req, res) => {
   }
 });
 
+// ================= TAG ROUTES =================
+
+// Get all available tags
+app.get("/api/tags", async (req, res) => {
+  try {
+    console.log('Fetching tags with counts...');
+    
+    // First get all tags
+    const [tags] = await db.query(`
+      SELECT 
+        t.id,
+        t.name,
+        t.color,
+        t.created_at,
+        p.full_name AS created_by_name
+      FROM tags t
+      LEFT JOIN profiles p ON t.created_by = p.id
+      ORDER BY t.name ASC
+    `);
+
+    console.log('Found tags:', tags.length);
+
+    // Get counts separately to ensure accuracy
+    const tagCounts = await Promise.all(
+      tags.map(async (tag) => {
+        const [[{ count }]] = await db.query(
+          "SELECT COUNT(*) as count FROM evidence_tags WHERE tag_id = ?",
+          [tag.id]
+        );
+        console.log(`Tag ${tag.name} has ${count} evidence items`);
+        return {
+          ...tag,
+          created_by: { full_name: tag.created_by_name },
+          evidence_count: parseInt(count || 0)
+        };
+      })
+    );
+
+    res.json(tagCounts);
+  } catch (err) {
+    console.error("Error fetching tags:", err);
+    res.status(500).json({ message: "Failed to fetch tags" });
+  }
+});
+
+// Get tags for a specific evidence
+app.get("/api/evidence/:id/tags", async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT t.id, t.name, t.color 
+       FROM evidence_tags et
+       JOIN tags t ON et.tag_id = t.id
+       WHERE et.evidence_id = ?`,
+      [req.params.id]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error("Error fetching evidence tags:", err);
+    res.status(500).json({ message: "Failed to fetch evidence tags" });
+  }
+});
+
+// Add or remove tags for an evidence
+app.post("/api/evidence/:id/tags", async (req, res) => {
+  const { tag_id } = req.body;
+  const { id } = req.params;
+  console.log('Adding tag to evidence:', { evidenceId: id, tagId: tag_id });
+  
+  if (!tag_id) return res.status(400).json({ message: "tag_id required" });
+
+  try {
+    // First verify if evidence exists
+    const [[evidence]] = await db.query("SELECT id, title FROM evidence WHERE id = ?", [id]);
+    console.log('Evidence check:', evidence);
+    
+    if (!evidence) {
+      return res.status(404).json({ message: "Evidence not found" });
+    }
+
+    // Then verify if tag exists
+    const [[tag]] = await db.query("SELECT id, name, color FROM tags WHERE id = ?", [tag_id]);
+    console.log('Tag check:', tag);
+    
+    if (!tag) {
+      return res.status(404).json({ message: "Tag not found" });
+    }
+
+    // Add the tag relation
+    await db.query("INSERT INTO evidence_tags (evidence_id, tag_id) VALUES (?, ?)", [id, tag_id]);
+    console.log('Tag relation added successfully');
+
+    // Create audit log for adding tag to evidence
+    const token = req.headers.authorization?.split(' ')[1];
+    let userId = null;
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret_key');
+        userId = decoded.id;
+      } catch (e) {
+        console.error('Error decoding token:', e);
+      }
+    }
+
+    if (userId) {
+      await db.query(
+        `INSERT INTO audit_logs (id, user_id, action, resource_type, resource_id, details, timestamp)
+         VALUES (UUID(), ?, 'add_tag', 'evidence', ?, ?, NOW())`,
+        [userId, id, JSON.stringify({ 
+          tag_name: tag.name,
+          tag_id: tag.id,
+          evidence_title: evidence.title
+        })]
+      );
+    }
+
+    // Verify the count after adding
+    const [[{ count }]] = await db.query(
+      "SELECT COUNT(*) as count FROM evidence_tags WHERE tag_id = ?",
+      [tag_id]
+    );
+    console.log('Current evidence count for this tag:', count);
+
+    // Return the tag information with count
+    res.json({ ...tag, evidence_count: count });
+  } catch (err) {
+    console.error("Error adding tag:", err);
+    res.status(500).json({ message: "Failed to add tag: " + err.message });
+  }
+});
+
+// Delete tag from evidence
+app.delete("/api/evidence/:id/tags/:tagId", async (req, res) => {
+  try {
+    console.log('Removing tag from evidence:', { evidenceId: req.params.id, tagId: req.params.tagId });
+
+    // Get evidence and tag details before deletion for audit log
+    const [[evidence]] = await db.query(
+      "SELECT id, title FROM evidence WHERE id = ?", 
+      [req.params.id]
+    );
+    const [[tag]] = await db.query(
+      "SELECT id, name FROM tags WHERE id = ?", 
+      [req.params.tagId]
+    );
+
+    const [result] = await db.query(
+      "DELETE FROM evidence_tags WHERE evidence_id = ? AND tag_id = ?",
+      [req.params.id, req.params.tagId]
+    );
+    
+    console.log('Delete result:', result);
+
+    // Create audit log for removing tag from evidence
+    const token = req.headers.authorization?.split(' ')[1];
+    let userId = null;
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret_key');
+        userId = decoded.id;
+      } catch (e) {
+        console.error('Error decoding token:', e);
+      }
+    }
+
+    if (userId && evidence && tag) {
+      await db.query(
+        `INSERT INTO audit_logs (id, user_id, action, resource_type, resource_id, details, timestamp)
+         VALUES (UUID(), ?, 'remove_tag', 'evidence', ?, ?, NOW())`,
+        [userId, evidence.id, JSON.stringify({ 
+          tag_name: tag.name,
+          tag_id: tag.id,
+          evidence_title: evidence.title
+        })]
+      );
+    }
+
+    // Get updated count
+    const [[{ count }]] = await db.query(
+      "SELECT COUNT(*) as count FROM evidence_tags WHERE tag_id = ?",
+      [req.params.tagId]
+    );
+    
+    console.log('Updated evidence count for tag:', count);
+
+    res.json({ 
+      message: "Tag removed",
+      evidence_count: count
+    });
+  } catch (err) {
+    console.error("Error removing tag:", err);
+    res.status(500).json({ message: "Failed to remove tag" });
+  }
+});
+
+
 app.post('/auth/login', async (req, res) => {
   console.log('TOP-LEVEL /auth/login body:', req.body);
   const { email, password } = req.body;
@@ -832,6 +1185,54 @@ app.post('/auth/login', async (req, res) => {
     return res.status(500).json({ message: 'Login failed' });
   }
 });
+
+// ✅ Get evidence details by database ID
+app.get("/api/evidence/id/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const [rows] = await db.query("SELECT * FROM evidence WHERE id = ?", [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "Evidence not found" });
+    }
+    res.json(rows[0]);
+  } catch (err) {
+    console.error("Error fetching evidence by ID:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+
+// Serve evidence files directly under /api/evidence/*
+// Serve evidence files dynamically — supports nested folders like /uploads/<case_id>/file.mp4
+app.get('/api/evidence/:filename', (req, res) => {
+  const requested = req.params.filename;
+
+  // search recursively under uploads/
+  const uploadsDir = path.join(__dirname, 'uploads');
+  let foundFile = null;
+
+  function findFileRecursively(dir) {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        findFileRecursively(fullPath);
+      } else if (entry.name === requested) {
+        foundFile = fullPath;
+        break;
+      }
+    }
+  }
+
+  findFileRecursively(uploadsDir);
+
+  if (!foundFile) {
+    return res.status(404).send('File not found');
+  }
+
+  res.sendFile(foundFile);
+});
+
 
 
 app.use("/api", router);

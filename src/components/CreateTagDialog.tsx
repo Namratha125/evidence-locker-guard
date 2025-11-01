@@ -29,44 +29,56 @@ const CreateTagDialog = ({ open, onOpenChange, onTagCreated }: CreateTagDialogPr
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
+  e.preventDefault();
+  if (!user) {
+    toast({
+      title: "Error",
+      description: "You must be logged in to create a tag.",
+      variant: "destructive",
+    });
+    return;
+  }
 
-    setLoading(true);
-    try {
-      const token = localStorage.getItem("token");
+  setLoading(true);
+  try {
+    const token = localStorage.getItem("token");
 
-      const res = await fetch(`${API_BASE}/api/tags`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token && { Authorization: `Bearer ${token}` }), 
-        },
-        body: JSON.stringify({ name, color }),
-      });
+    const res = await fetch(`${API_BASE}/api/tags`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+      body: JSON.stringify({
+        name,
+        color,
+        created_by: user.id, // ✅ include logged-in user's profile ID
+      }),
+    });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create tag");
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || data.error || "Failed to create tag");
 
-      toast({
-        title: "Success",
-        description: "Tag created successfully",
-      });
+    toast({
+      title: "Success",
+      description: `Tag "${name}" created successfully.`,
+    });
 
-      setName('');
-      setColor('#3b82f6');
-      onOpenChange(false);
-      onTagCreated();
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: "Failed to create tag: " + error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+    setName("");
+    setColor("#3b82f6");
+    onOpenChange(false);
+    onTagCreated();
+  } catch (error: any) {
+    toast({
+      title: "Error",
+      description: "Failed to create tag: " + error.message,
+      variant: "destructive",
+    });
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
