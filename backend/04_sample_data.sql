@@ -1,13 +1,5 @@
 USE evidence_locker;
 
--- 1) Create 5 profiles (users)
--- Make sure you're using the correct database
-USE evidence_locker;
-
--- Insert 5 users with email and bcrypt-hashed passwords
--- Passwords used (plaintext for reference): Admin123!, Invest123!, Invest234!, Analyst123!, Legal123!
--- These hashes are generated with bcrypt 10 rounds
-
 INSERT INTO profiles (id,username, full_name, role, email, password) VALUES
 (NULL,'admin', 'Admin User', 'admin', 'admin@example.com', '$2b$10$CwTycUXWue0Thq9StjUM0uJ8VbC4h9R0EDpqN3XrN5hK7fUJ92t4W'),
 (NULL,'invest1', 'Investigator One', 'investigator', 'invest1@example.com', '$2b$10$N9qo8uLOickgx2ZMRZo5i.uW8TZp6Kq6FjX.oD/3RZbX4JpPzH/fi'),
@@ -125,3 +117,7 @@ SELECT * FROM chain_of_custody WHERE evidence_id = @e1;
 
 -- View last 20 audit log entries (to see what triggers/procedures created)
 SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 20;
+
+-- Example function calls
+SELECT get_user_role(@invest1) AS user_role;
+SELECT countEvidenceByCase(@case1) AS total_evidence_in_case1;

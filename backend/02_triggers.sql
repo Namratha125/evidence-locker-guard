@@ -57,7 +57,6 @@ CREATE TRIGGER trg_case_status_audit
 AFTER UPDATE ON cases
 FOR EACH ROW
 BEGIN
-  -- Only log if status actually changed (NULL-safe comparison)
   IF NOT (OLD.status <=> NEW.status) THEN
     INSERT INTO audit_logs (
       id,
