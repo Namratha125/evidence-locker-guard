@@ -17,6 +17,7 @@ import {
   Eye,
   Link2
 } from 'lucide-react';
+import { format } from 'date-fns';
 import EditCaseDialog from '@/components/EditCaseDialog';
 import ChainOfCustodyDialog from '@/components/ChainOfCustodyDialog';
 import CommentsSection from '@/components/CommentsSection';
@@ -65,6 +66,26 @@ const CaseDetails = () => {
   const [custodyDialogOpen, setCustodyDialogOpen] = useState(false);
   const [selectedEvidenceId, setSelectedEvidenceId] = useState<string>('');
 
+  // parse date strings like "YYYY-MM-DD HH:MM:SS" safely across browsers
+  const parseDate = (s?: any) => {
+    if (!s && s !== 0) return null;
+    if (s instanceof Date) return isNaN(s.getTime()) ? null : s;
+    if (typeof s === 'number') {
+      const d = new Date(s);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    const str = String(s);
+    if (str === '0000-00-00 00:00:00') return null;
+    const normalized = str.includes(' ') && !str.includes('T') ? str.replace(' ', 'T') : str;
+    const d = new Date(normalized);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  const formatDateString = (s?: any, fmt = 'PPP') => {
+    const d = parseDate(s);
+    return d ? format(d, fmt) : 'Invalid date';
+  };
+
   useEffect(() => {
     if (id) {
       fetchCaseData();
@@ -83,14 +104,15 @@ const CaseDetails = () => {
 
       if (userIds.length > 0) {
         const profileRes = await axios.post('/api/profiles/by-ids', { ids: userIds });
-        profilesMap = new Map(profileRes.data.map((p: any) => [p.id, p]));
+        // normalize keys to strings to avoid mismatches
+        profilesMap = new Map(profileRes.data.map((p: any) => [String(p.id), p]));
       }
 
       const caseWithProfiles = {
         ...caseInfo,
-        creator: profilesMap.get(caseInfo.created_by),
-        assignee: caseInfo.assigned_to ? profilesMap.get(caseInfo.assigned_to) : null,
-        lead_investigator: caseInfo.lead_investigator_id ? profilesMap.get(caseInfo.lead_investigator_id) : null
+        creator: profilesMap.get(String(caseInfo.created_by)),
+        assignee: caseInfo.assigned_to ? profilesMap.get(String(caseInfo.assigned_to)) : null,
+        lead_investigator: caseInfo.lead_investigator_id ? profilesMap.get(String(caseInfo.lead_investigator_id)) : null
       };
 
       setCaseData(caseWithProfiles);
@@ -113,12 +135,12 @@ const CaseDetails = () => {
 
       if (uploaderIds.length > 0) {
         const profileRes = await axios.post('/api/profiles/by-ids', { ids: uploaderIds });
-        profilesMap = new Map(profileRes.data.map((p: any) => [p.id, p]));
+        profilesMap = new Map(profileRes.data.map((p: any) => [String(p.id), p]));
       }
 
       const evidenceWithProfiles = evidenceData.map((e: any) => ({
         ...e,
-        uploader: profilesMap.get(e.uploaded_by)
+        uploader: profilesMap.get(String(e.uploaded_by))
       }));
 
       setEvidence(evidenceWithProfiles);
@@ -251,13 +273,13 @@ const CaseDetails = () => {
                   <div className="flex items-center gap-2 text-sm">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                     <span className="text-muted-foreground">Created:</span>
-                    <span>{new Date(caseData.created_at).toLocaleDateString()}</span>
+                    <span>{formatDateString(caseData.created_at)}</span>
                   </div>
                   {caseData.due_date && (
                     <div className="flex items-center gap-2 text-sm">
                       <Calendar className="h-4 w-4 text-muted-foreground" />
                       <span className="text-muted-foreground">Due Date:</span>
-                      <span>{new Date(caseData.due_date).toLocaleDateString()}</span>
+                      <span>{formatDateString(caseData.due_date)}</span>
                     </div>
                   )}
                 </div>

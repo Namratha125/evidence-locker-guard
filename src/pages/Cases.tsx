@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -33,6 +34,30 @@ interface Case {
 
 export default function Cases() {
   const navigate = useNavigate();
+  // Robust date parser: accepts Date, number (timestamp), or string like
+  // "YYYY-MM-DD HH:MM:SS" and normalizes to a Date or returns null.
+  const parseDate = (s?: any) => {
+    if (!s && s !== 0) return null;
+    // handle Date instance
+    if (s instanceof Date) return isNaN(s.getTime()) ? null : s;
+    // handle numeric timestamps
+    if (typeof s === 'number') {
+      const d = new Date(s);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    const str = String(s);
+    // treat MySQL zero datetime as missing
+    if (str === '0000-00-00 00:00:00') return null;
+    // If string uses space between date and time and no 'T', convert to ISO-ish
+    const normalized = str.includes(' ') && !str.includes('T') ? str.replace(' ', 'T') : str;
+    const d = new Date(normalized);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  const formatDateString = (s?: any, fmt = 'MMM dd, yyyy') => {
+    const d = parseDate(s);
+    return d ? format(d, fmt) : null;
+  };
   const [cases, setCases] = useState<Case[]>([]);
   const [filteredCases, setFilteredCases] = useState<Case[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -44,10 +69,14 @@ export default function Cases() {
   const [users, setUsers] = useState<Array<{ id: string; full_name: string }>>([]);
   const { toast } = useToast();
 
+  const { profile } = useAuth();
+
   useEffect(() => {
-    fetchCases();
-    fetchUsers();
-  }, []);
+    if (profile) {
+      fetchCases();
+      fetchUsers();
+    }
+  }, [profile]);
 
   useEffect(() => {
     setFilteredCases(cases);
@@ -55,26 +84,61 @@ export default function Cases() {
 
   const fetchCases = async () => {
     try {
+      if (!profile) return;
+      
       setIsLoading(true);
-      const res = await axios.get('/api/cases');
-      const casesData = res.data;
+      // Build URL based on user role
+      let url = '/api/cases';
+      if (profile.role !== 'admin') {
+        // For non-admin users, only fetch cases they're involved with
+        url += `?userId=${profile.id}`;
+      }
+      const res = await axios.get(url);
+      let casesData = res.data;
 
       if (casesData && casesData.length > 0) {
+        // If the list endpoint returns minimal case objects (no created_at/assigned_to),
+        // fetch details for those cases so the dashboard can show dates and assignments.
+        const needsDetails = casesData.filter((c: any) => !c.created_at || c.assigned_to === undefined);
+        if (needsDetails.length > 0) {
+          try {
+            const detailPromises = needsDetails.map((c: any) => axios.get(`/api/cases/${c.id}`));
+            const detailsRes = await Promise.allSettled(detailPromises);
+            const detailsMap = new Map<string, any>();
+            detailsRes.forEach((r) => {
+              if (r.status === 'fulfilled' && r.value?.data) {
+                detailsMap.set(r.value.data.id, r.value.data);
+              }
+            });
+            // merge details into a new array and reuse the variable for downstream processing
+            const mergedCases = casesData.map((c: any) => detailsMap.get(c.id) ? { ...c, ...detailsMap.get(c.id) } : c);
+            casesData = mergedCases as any;
+          } catch (err) {
+            // non-fatal, continue with whatever data we have
+            console.warn('Failed to fetch case details for list:', err);
+          }
+        }
         const userIds = [...new Set([
           ...casesData.map((c: any) => c.assigned_to).filter(Boolean),
           ...casesData.map((c: any) => c.created_by).filter(Boolean),
+          ...casesData.map((c: any) => c.lead_investigator_id).filter(Boolean),
         ])];
 
         let profilesMap = new Map();
         if (userIds.length > 0) {
           const profileRes = await axios.post('/api/profiles/by-ids', { ids: userIds });
-          profilesMap = new Map(profileRes.data.map((p: any) => [p.id, p]));
+          // Store both number and string versions of IDs to handle type mismatches
+          profileRes.data.forEach((p: any) => {
+            profilesMap.set(String(p.id), p);
+            profilesMap.set(Number(p.id), p);
+            profilesMap.set(p.id, p);
+          });
         }
 
         const casesWithProfiles = casesData.map((c: any) => ({
           ...c,
           assigned_user: c.assigned_to ? profilesMap.get(c.assigned_to) : null,
-          creator: profilesMap.get(c.created_by) || null,
+          creator: c.created_by ? profilesMap.get(c.created_by) : null,
         }));
 
         setCases(casesWithProfiles);
@@ -94,7 +158,16 @@ export default function Cases() {
 
   const fetchUsers = async () => {
     try {
-      const res = await axios.get('/api/profiles');
+      if (!profile) return;
+      
+      // For admin, fetch all users
+      // For other roles, fetch users related to their cases/department
+      let url = '/api/profiles';
+      if (profile.role !== 'admin') {
+        url += `?relatedToUser=${profile.id}`;
+      }
+      
+      const res = await axios.get(url);
       setUsers(res.data || []);
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -125,15 +198,17 @@ export default function Cases() {
     }
 
     if (filters.dateFrom) {
-      filtered = filtered.filter(c =>
-        new Date(c.created_at) >= filters.dateFrom
-      );
+      filtered = filtered.filter(c => {
+        const created = parseDate(c.created_at);
+        return created ? created >= filters.dateFrom : false;
+      });
     }
 
     if (filters.dateTo) {
-      filtered = filtered.filter(c =>
-        new Date(c.created_at) <= filters.dateTo
-      );
+      filtered = filtered.filter(c => {
+        const created = parseDate(c.created_at);
+        return created ? created <= filters.dateTo : false;
+      });
     }
 
     setFilteredCases(filtered);
@@ -275,11 +350,11 @@ export default function Cases() {
                 <div className="grid grid-cols-2 gap-4 text-xs text-muted-foreground mb-4">
                   <div className="flex items-center gap-1">
                     <User className="h-3 w-3" />
-                    <span>Assigned: {case_.assigned_user?.full_name || 'Unassigned'}</span>
+                    <span>Assigned: {case_.assigned_user?.full_name || case_.assigned_to || 'Unassigned'}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
-                    <span>Due: {case_.due_date ? format(new Date(case_.due_date), 'MMM dd, yyyy') : 'No due date'}</span>
+                    <span>Due: {case_.due_date ? formatDateString(case_.due_date) : 'No due date'}</span>
                   </div>
                 </div>
                 {case_.findings && (
@@ -289,7 +364,7 @@ export default function Cases() {
                   </div>
                 )}
                 <div className="text-xs text-muted-foreground">
-                  Created: {new Date(case_.created_at).toLocaleDateString()} by {case_.creator?.full_name || 'Unknown'}
+                  Created: {formatDateString(case_.created_at)} by {case_.creator?.full_name || 'Unknown'}
                 </div>
               </CardContent>
             </Card>

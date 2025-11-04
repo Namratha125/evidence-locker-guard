@@ -13,6 +13,21 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 
+// parse date strings like "YYYY-MM-DD HH:MM:SS" reliably across browsers
+const parseDate = (s?: any) => {
+  if (!s && s !== 0) return null;
+  if (s instanceof Date) return isNaN(s.getTime()) ? null : s;
+  if (typeof s === 'number') {
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const str = String(s);
+  if (str === '0000-00-00 00:00:00') return null;
+  const normalized = str.includes(' ') && !str.includes('T') ? str.replace(' ', 'T') : str;
+  const d = new Date(normalized);
+  return isNaN(d.getTime()) ? null : d;
+};
+
 interface Case {
   id: string;
   case_number: string;
@@ -40,7 +55,8 @@ interface EditCaseDialogProps {
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
-export default function EditCaseDialog({ case_, open, onOpenChange, onUpdate }: EditCaseDialogProps) {
+export default function EditCaseDialog({ case_, open, onOpenChange, onUpdate }) {
+  const { profile } = useAuth();
   const [formData, setFormData] = useState({
     case_number: '',
     title: '',
@@ -66,7 +82,7 @@ export default function EditCaseDialog({ case_, open, onOpenChange, onUpdate }: 
         priority: case_.priority || 'medium',
         assigned_to: case_.assigned_to || '',
         findings: case_.findings || '',
-        due_date: case_.due_date ? new Date(case_.due_date) : null,
+        due_date: case_.due_date ? parseDate(case_.due_date) : null,
       });
     }
   }, [case_]);
@@ -121,42 +137,15 @@ export default function EditCaseDialog({ case_, open, onOpenChange, onUpdate }: 
         body: JSON.stringify(updateData),
       });
 
-      if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(txt || 'Failed to update case');
-      }
-
-      // Optionally create audit log (backend can also do this)
-      try {
-        await fetch(`${API_BASE}/api/audit_logs`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            user_id: user?.id ?? null,
-            action: 'update',
-            resource_type: 'case',
-            resource_id: case_.id,
-            details: { case_number: formData.case_number, changes: updateData }
-          })
-        });
-      } catch (auditErr) {
-        console.warn('Audit log failed (non-blocking):', auditErr);
-      }
-
-      toast({
-        title: "Success",
-        description: "Case updated successfully",
-      });
+      if (!res.ok) throw new Error(await res.text());
+      toast({ title: "Success", description: "Case updated successfully" });
 
       onUpdate();
       onOpenChange(false);
-    } catch (error: any) {
+    } catch (err: any) {
       toast({
         title: "Error",
-        description: "Failed to update case: " + (error.message || error),
+        description: "Failed to update case: " + err.message,
         variant: "destructive",
       });
     } finally {

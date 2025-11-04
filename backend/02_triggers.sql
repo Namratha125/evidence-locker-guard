@@ -52,4 +52,71 @@ FOR EACH ROW BEGIN
           JSON_OBJECT('content',SUBSTRING(NEW.content,1,255)));
 END$$
 
-DELIMITER ;
+
+CREATE TRIGGER trg_case_status_audit
+AFTER UPDATE ON cases
+FOR EACH ROW
+BEGIN
+  -- Only log if status actually changed (NULL-safe comparison)
+  IF NOT (OLD.status <=> NEW.status) THEN
+    INSERT INTO audit_logs (
+      id,
+      user_id,
+      action,
+      resource_type,
+      resource_id,
+      details,
+      `timestamp`
+    ) VALUES (
+      UUID(),
+      COALESCE(NEW.updated_by, NEW.created_by),
+      'Updated case',
+      'case',
+      NEW.id,
+      JSON_OBJECT(
+        'oldStatus', IFNULL(OLD.status, 'NULL'),
+        'newStatus', IFNULL(NEW.status, 'NULL'),
+        'message', CONCAT('Case status changed from ', IFNULL(OLD.status,'NULL'), ' to ', IFNULL(NEW.status,'NULL'))
+      ),
+      NOW()
+    );
+  END IF;
+END$$
+
+CREATE TRIGGER trg_evidence_status_audit
+AFTER UPDATE ON evidence
+FOR EACH ROW
+BEGIN
+  IF NOT (OLD.status <=> NEW.status) THEN
+    INSERT INTO audit_logs (
+      id,
+      user_id,
+      updated_by,
+      action,
+      resource_type,
+      resource_id,
+      details,
+      `timestamp`
+    ) VALUES (
+      UUID(),
+      COALESCE(NEW.updated_by, NEW.uploaded_by),
+      NEW.updated_by,
+      'Updated evidence',
+      'evidence',
+      NEW.id,
+      JSON_OBJECT(
+        'oldStatus', IFNULL(OLD.status, ''),
+        'newStatus', IFNULL(NEW.status, ''),
+        'message', CONCAT(
+          'Evidence status changed from ',
+          IFNULL(OLD.status, 'NULL'),
+          ' to ',
+          IFNULL(NEW.status, 'NULL')
+        )
+      ),
+      NOW()
+    );
+  END IF;
+END$$
+
+

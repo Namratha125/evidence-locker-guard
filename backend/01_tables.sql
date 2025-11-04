@@ -28,6 +28,7 @@ CREATE TABLE cases (
   created_by CHAR(36) NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  updated_by CHAR(36) NULL,
   FOREIGN KEY (lead_investigator_id) REFERENCES profiles(id),
   FOREIGN KEY (assigned_to) REFERENCES profiles(id),
   FOREIGN KEY (created_by) REFERENCES profiles(id)
@@ -57,6 +58,7 @@ CREATE TABLE evidence (
   collected_by VARCHAR(255),
   location_found VARCHAR(255),
   uploaded_by CHAR(36) NOT NULL,
+  updated_by CHAR(36)
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
@@ -94,7 +96,8 @@ CREATE TABLE audit_logs (
   details JSON,
   ip_address VARCHAR(100),
   user_agent VARCHAR(255),
-  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_by TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES profiles(id)
 );
 

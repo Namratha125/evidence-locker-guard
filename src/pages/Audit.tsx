@@ -11,10 +11,14 @@ const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 interface AuditLog {
   id: string;
-  action: string;
+  action: 'CREATE_CASE' | 'UPDATE_CASE' | 'UPDATE_CASE_STATUS' | 'DELETE_CASE' | string;
   resource_type: string;
   resource_id: string;
-  details: any;
+  details: {
+    oldStatus?: string;
+    newStatus?: string;
+    message?: string;
+  };
   timestamp: string;
   user_id: string;
   user: {
@@ -96,11 +100,47 @@ const Audit = () => {
         return 'secondary';
     }
   };
+  // Add a helper function to parse and format JSON details
+const formatDetails = (details: any): string => {
+  if (typeof details === 'string') {
+    try {
+      details = JSON.parse(details);
+    } catch {
+      return details;
+    }
+  }
+
+  if (details.file_name) {
+    return `File: ${details.file_name}`;
+  }
+
+  if (details.content) {
+    return `Comment: ${details.content}`;
+  }
+
+  if (details.name && details.color) {
+    return `Tag: ${details.name} (${details.color})`;
+  }
+
+  // Add other specific formatters as needed
+  return Object.entries(details)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join(', ');
+};
+
+// Update the existing formatLogDetails function
+const formatLogDetails = (log: AuditLog) => {
+  if (!log.details) return '';
+  
+  return formatDetails(log.details);
+};
+
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
     return date.toLocaleString();
   };
+
 
   if (loading) {
     return (
@@ -197,19 +237,17 @@ const Audit = () => {
                         {log.user?.full_name} ({log.user?.username})
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {log.action} {log.resource_type} {log.resource_id}
+                        {log.resource_type} {log.resource_id}
                       </p>
+                      {log.details && (
+                        <p className="text-sm text-foreground mt-1">
+                          {formatLogDetails(log)}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="text-right text-sm text-muted-foreground">
                     <p>{formatTimestamp(log.timestamp)}</p>
-                    {log.details && (
-                      <p className="text-xs">
-                        {JSON.stringify(log.details).length > 50 
-                          ? JSON.stringify(log.details).substring(0, 50) + '...' 
-                          : JSON.stringify(log.details)}
-                      </p>
-                    )}
                   </div>
                 </div>
               </CardContent>

@@ -45,7 +45,7 @@ export function Layout({ children }: LayoutProps) {
           <header className="h-14 flex items-center border-b border-border bg-background px-4">
             <SidebarTrigger className="mr-4" />
             <div className="flex-1">
-              <h1 className="font-semibold text-foreground">Digital Evidence Management System</h1>
+              <h1 className="font-semibold text-foreground">Digital Evidence Locker</h1>
             </div>
           </header>
           <main className="flex-1 overflow-auto">

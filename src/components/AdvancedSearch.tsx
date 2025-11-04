@@ -206,7 +206,13 @@ export default function AdvancedSearch({ onSearch, type, users = [], cases = [],
                 <Calendar
                   mode="single"
                   selected={filters.dateFrom}
-                  onSelect={(date) => setFilters({ ...filters, dateFrom: date })}
+                  onSelect={(date) => {
+                    if (date) {
+                      // Set to start of day
+                      date.setHours(0, 0, 0, 0);
+                    }
+                    setFilters({ ...filters, dateFrom: date });
+                  }}
                   initialFocus
                 />
               </PopoverContent>
@@ -229,7 +235,13 @@ export default function AdvancedSearch({ onSearch, type, users = [], cases = [],
                 <Calendar
                   mode="single"
                   selected={filters.dateTo}
-                  onSelect={(date) => setFilters({ ...filters, dateTo: date })}
+                  onSelect={(date) => {
+                    if (date) {
+                      // Set to end of day
+                      date.setHours(23, 59, 59, 999);
+                    }
+                    setFilters({ ...filters, dateTo: date });
+                  }}
                   initialFocus
                 />
               </PopoverContent>

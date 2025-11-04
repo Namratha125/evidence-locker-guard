@@ -187,12 +187,14 @@ router.post("/profiles/by-ids", async (req, res) => {
 router.get("/evidence/case/:id", async (req, res) => {
   try {
     const { id } = req.params;
+    
     const [rows] = await db.query("SELECT * FROM evidence WHERE case_id = ?", [id]);
     res.json(rows);
   } catch (err) {
     console.error("Error fetching evidence for case:", err);
     res.status(500).json({ message: "Failed to fetch evidence for case" });
   }
+  
 });
 
 // /api/cases/:id/status
@@ -206,6 +208,35 @@ router.put("/cases/:id/status", async (req, res) => {
   } catch (err) {
     console.error("Error updating case status:", err);
     res.status(500).json({ message: "Failed to update case status" });
+  }
+});
+
+// /api/cases/:id  <-- this route was missing
+router.put("/cases/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      case_number,
+      title,
+      description,
+      status,
+      priority,
+      assigned_to,
+      findings,
+      due_date
+    } = req.body;
+
+    await db.query(
+      `UPDATE cases 
+       SET case_number = ?, title = ?, description = ?, status = ?, priority = ?, assigned_to = ?, findings = ?, due_date = ? 
+       WHERE id = ?`,
+      [case_number, title, description, status, priority, assigned_to, findings, due_date, id]
+    );
+
+    res.json({ message: "Case updated successfully" });
+  } catch (err) {
+    console.error("Error updating case:", err);
+    res.status(500).json({ message: "Failed to update case" });
   }
 });
 

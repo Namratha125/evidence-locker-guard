@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
+import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -81,20 +83,53 @@ const Evidence = () => {
   const [tags, setTags] = useState<Array<{ id: string; name: string; color: string }>>([]);
   const { toast } = useToast();
 
+  const { profile } = useAuth();
+
   useEffect(() => {
-    fetchEvidence();
-    fetchCases();
-    fetchTags();
-  }, []);
+    if (profile) {
+      fetchEvidence();
+      fetchCases();
+      fetchTags();
+    }
+  }, [profile]);
+
+  // Robust date parser used by filters and display
+  const parseDate = (s?: any) => {
+    if (!s && s !== 0) return null;
+    if (s instanceof Date) return isNaN(s.getTime()) ? null : s;
+    if (typeof s === 'number') {
+      const d = new Date(s);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    const str = String(s);
+    if (str === '0000-00-00 00:00:00') return null;
+    const normalized = str.includes(' ') && !str.includes('T') ? str.replace(' ', 'T') : str;
+    const d = new Date(normalized);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  const formatDateString = (s?: any, fmt = 'PPP') => {
+    const d = parseDate(s);
+    return d ? format(d, fmt) : 'Unknown';
+  };
 
   useEffect(() => {
     setFilteredEvidence(evidence);
   }, [evidence]);
 
-  // Fetch all evidence
+  // Fetch all evidence with role-based filtering
   const fetchEvidence = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/evidence`);
+      if (!profile) return;
+      
+      let url = `${API_BASE}/api/evidence`;
+      // If not admin, fetch only relevant evidence
+      if (profile.role !== 'admin') {
+        // For investigators, analysts, and other roles, fetch evidence they created or that belongs to their cases
+        url += `?userId=${profile.id}`;
+      }
+      
+      const res = await fetch(url);
       if (!res.ok) throw new Error('Failed to fetch evidence');
       const data = await res.json();
       setEvidence(data || []);
@@ -109,10 +144,19 @@ const Evidence = () => {
     }
   };
 
-  // Fetch cases
+  // Fetch cases with role-based filtering
   const fetchCases = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/cases`);
+      if (!profile) return;
+      
+      let url = `${API_BASE}/api/cases`;
+      // If not admin, fetch only relevant cases
+      if (profile.role !== 'admin') {
+        // For investigators and analysts, fetch cases they're assigned to or created
+        url += `?userId=${profile.id}`;
+      }
+      
+      const res = await fetch(url);
       if (!res.ok) throw new Error('Failed to fetch cases');
       const data = await res.json();
       setCases(data || []);
@@ -121,10 +165,19 @@ const Evidence = () => {
     }
   };
 
-  // Fetch tags
+  // Fetch tags with role-based filtering
   const fetchTags = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/tags`);
+      if (!profile) return;
+      
+      let url = `${API_BASE}/api/tags`;
+      // If not admin, fetch only relevant tags
+      if (profile.role !== 'admin') {
+        // For investigators and analysts, fetch tags from their cases/evidence
+        url += `?userId=${profile.id}`;
+      }
+      
+      const res = await fetch(url);
       if (!res.ok) throw new Error('Failed to fetch tags');
       const data = await res.json();
       setTags(data || []);
@@ -154,36 +207,53 @@ const Evidence = () => {
 
   const handleAdvancedSearch = (filters: any) => {
     let filtered = [...evidence];
-
-    if (filters.query.trim()) {
+    const query = (filters.query || '').toString().trim();
+    if (query) {
+      const q = query.toLowerCase();
       filtered = filtered.filter(e =>
-        e.title.toLowerCase().includes(filters.query.toLowerCase()) ||
-        e.description?.toLowerCase().includes(filters.query.toLowerCase()) ||
-        e.file_name?.toLowerCase().includes(filters.query.toLowerCase()) ||
-        e.case?.case_number.toLowerCase().includes(filters.query.toLowerCase())
+        (e.title || '').toLowerCase().includes(q) ||
+        (e.description || '').toLowerCase().includes(q) ||
+        (e.file_name || '').toLowerCase().includes(q) ||
+        (e.case?.case_number || '').toLowerCase().includes(q)
       );
     }
 
     if (filters.status && filters.status !== 'all') {
-      filtered = filtered.filter(e => e.status === filters.status);
+      const s = String(filters.status).toLowerCase();
+      filtered = filtered.filter(e => String(e.status).toLowerCase() === s);
     }
 
     if (filters.caseId && filters.caseId !== 'all') {
-      filtered = filtered.filter(e => e.case_id === filters.caseId);
+      const cid = String(filters.caseId);
+      filtered = filtered.filter(e => String(e.case_id) === cid);
     }
 
     if (filters.tagId && filters.tagId !== 'all') {
+      const tid = String(filters.tagId);
       filtered = filtered.filter(e => 
-        e.tags?.some(t => t.id === filters.tagId)
+        !!e.tags && e.tags.some(t => String(t.id) === tid)
       );
     }
 
-    if (filters.dateFrom) {
-      filtered = filtered.filter(e => new Date(e.created_at) >= filters.dateFrom);
+    // Normalize date filters and ensure proper comparison
+    const from = filters.dateFrom ? new Date(filters.dateFrom.setHours(0, 0, 0, 0)) : null;
+    // Set end of day for "to" date to include the entire day
+    const to = filters.dateTo ? new Date(filters.dateTo.setHours(23, 59, 59, 999)) : null;
+
+    if (from) {
+      filtered = filtered.filter(e => {
+        const d = parseDate(e.created_at);
+        // Compare dates at start of day for consistent comparison
+        return d ? new Date(d.setHours(0, 0, 0, 0)) >= from : false;
+      });
     }
 
-    if (filters.dateTo) {
-      filtered = filtered.filter(e => new Date(e.created_at) <= filters.dateTo);
+    if (to) {
+      filtered = filtered.filter(e => {
+        const d = parseDate(e.created_at);
+        // Compare with end of day for "to" date
+        return d ? d <= to : false;
+      });
     }
 
     setFilteredEvidence(filtered);
@@ -395,7 +465,7 @@ const Evidence = () => {
                   </div>
                   <div className="flex items-center gap-4">
                     <span>Uploaded by: {item.uploaded_by?.full_name}</span>
-                    <span>Date: {new Date(item.created_at).toLocaleDateString()}</span>
+                    <span>Date: {formatDateString(item.created_at)}</span>
                   </div>
                 </div>
               </CardContent>

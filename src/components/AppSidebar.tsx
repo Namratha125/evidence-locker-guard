@@ -86,7 +86,7 @@ export function AppSidebar() {
           <Shield className="h-8 w-8 text-sidebar-primary" />
           {!collapsed && (
             <div className="flex flex-col">
-              <span className="font-semibold text-sidebar-foreground">Evidence Locker</span>
+              <span className="font-semibold text-sidebar-foreground">Digital Evidence Locker</span>
               <span className="text-xs text-sidebar-foreground/70">
                 {profile?.full_name} ({profile?.role})
               </span>
