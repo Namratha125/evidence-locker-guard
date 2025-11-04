@@ -162,7 +162,7 @@ router.get("/evidence", async (req, res) => {
 // alias: /api/users → /api/profiles
 router.get("/users", async (req, res) => {
   try {
-    const [rows] = await db.query("SELECT id, full_name, email, role FROM profiles");
+    const [rows] = await db.query("SELECT id, username, full_name, email, role, department, badge_number, created_at, updated_at FROM profiles");
     res.json(rows);
   } catch (err) {
     console.error("Error fetching users:", err);
@@ -348,7 +348,8 @@ router.post("/evidence/upload", upload.single("file"), async (req, res) => {
 // --------------------
 router.get("/profiles", async (req, res) => {
   try {
-    const [rows] = await db.query("SELECT id, username, full_name, role, department, badge_number, email FROM profiles ORDER BY full_name");
+    // include created_at/updated_at so front-end can display join date
+    const [rows] = await db.query("SELECT id, username, full_name, role, department, badge_number, email, created_at, updated_at FROM profiles ORDER BY full_name");
     res.json(rows);
   } catch (err) {
     console.error("Error fetching profiles", err);

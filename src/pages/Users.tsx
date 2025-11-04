@@ -205,9 +205,7 @@ const Users = () => {
                   )}
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Joined</span>
-                    <span className="text-sm">
-                      {new Date(user.created_at).toLocaleDateString()}
-                    </span>
+                    <span className="text-sm">{formatDateSafe(user.created_at)}</span>
                   </div>
                 </div>
               </CardContent>
@@ -225,4 +223,11 @@ const Users = () => {
   );
 };
 
+// Safe date formatter: returns a human date or a fallback when invalid/missing
+const formatDateSafe = (dateStr?: string | null) => {
+  if (!dateStr) return "Unknown";
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "Unknown";
+  return d.toLocaleDateString();
+};
 export default Users;
