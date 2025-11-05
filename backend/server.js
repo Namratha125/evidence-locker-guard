@@ -21,33 +21,55 @@ app.use(cors());
 app.use(express.json());
 
 const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-const __dirname = path.resolve();
-
-// ✅ Serve static files correctly whether you run from root or backend
-const uploadsDir = path.join(__dirname, "uploads");
-app.use("/uploads", express.static(uploadsDir));
-
-console.log("Serving uploads from:", uploadsDir);
+// uploads directory (relative to this server file)
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
+app.use('/uploads', express.static(UPLOADS_DIR));
+console.log('Serving uploads from:', UPLOADS_DIR);
 
 
 // Fallback route for prefixed files like "1761807101279_S002_1.jpg"
 app.get('/api/uploads/:folder/:file', (req, res) => {
   const { folder, file } = req.params;
-  const dir = path.join(__dirname, 'uploads', folder);
+  const dir = path.join(UPLOADS_DIR, folder);
 
-  if (!fs.existsSync(dir)) {
-    return res.status(404).send('Folder not found');
+  // If the folder exists, look for the file inside it
+  if (fs.existsSync(dir)) {
+    const match = fs.readdirSync(dir).find(f => f.endsWith(file));
+    if (match) {
+      const fullPath = path.join(dir, match);
+      return res.sendFile(fullPath);
+    }
   }
 
-  // Try to find a file that ends with the requested name
-  const match = fs.readdirSync(dir).find(f => f.endsWith(file));
-  if (!match) {
+  // Fallback: search uploads directory recursively for the filename
+  let foundFile = null;
+  function findFileRecursively(searchDir) {
+    const entries = fs.readdirSync(searchDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(searchDir, entry.name);
+      if (entry.isDirectory()) {
+        findFileRecursively(fullPath);
+        if (foundFile) return;
+      } else if (entry.name === file || entry.name.endsWith(file)) {
+        foundFile = fullPath;
+        return;
+      }
+    }
+  }
+
+  try {
+    findFileRecursively(UPLOADS_DIR);
+  } catch (e) {
+    console.error('Error searching uploads for file:', e);
+  }
+
+  if (!foundFile) {
     return res.status(404).send('File not found');
   }
 
-  const fullPath = path.join(dir, match);
-  res.sendFile(fullPath);
+  return res.sendFile(foundFile);
 });
 
 
@@ -66,13 +88,10 @@ app.use(
 // Ensure uploads dir exists
 // --------------------------
 
-// Example log to verify path
-console.log("Serving uploads from:", path.join(__dirname, "backend/uploads"));
 // ---------------------------
 // Multer storage configuration
 // ---------------------------
-// ✅ Define upload directory globally before using in multer
-const UPLOADS_DIR = path.join(__dirname, "uploads");
+// ✅ Define upload directory globally before using in multer (UPLOADS_DIR defined above)
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -1050,7 +1069,6 @@ app.post('/auth/signup', async (req, res) => {
   const email = req.body.email;
   const password = req.body.password;
   const username = req.body.username;
-  const role = req.body.role;
   const badge_number = req.body.badgeNumber || req.body.badge_number || null;
   const department = req.body.department || null;
   const full_name = req.body.fullName || req.body.full_name || username;
@@ -1060,6 +1078,11 @@ app.post('/auth/signup', async (req, res) => {
     return res.status(400).json({ message: 'Email, password, and username are required' });
   }
 
+  // Never allow admin role through public signup
+  if (req.body.role === 'admin') {
+    return res.status(403).json({ message: 'Cannot create admin accounts through public signup' });
+  }
+
   try {
     const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
     const id = uuidv4();
@@ -1067,7 +1090,7 @@ app.post('/auth/signup', async (req, res) => {
     await db.query(
       `INSERT INTO profiles (id, username, full_name, role, badge_number, department, email, password, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
-      [id, username, full_name || username, role || 'analyst', badge_number, department || null, email, hashedPassword]
+      [id, username, full_name || username, 'analyst', badge_number, department || null, email, hashedPassword] // Always set analyst role
     );
 
     return res.status(201).json({ message: 'User created successfully', id });

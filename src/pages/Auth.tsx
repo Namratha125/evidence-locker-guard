@@ -23,7 +23,7 @@ const Auth = () => {
   const [signUpPassword, setSignUpPassword] = useState('');
   const [username, setUsername] = useState('');
   const [fullName, setFullName] = useState('');
-  const [role, setRole] = useState<'admin' | 'investigator' | 'analyst' | 'legal'>('analyst');
+  const [role, setRole] = useState<'investigator' | 'analyst' | 'legal'>('analyst');
   const [badgeNumber, setBadgeNumber] = useState('');
   const [department, setDepartment] = useState('');
 
@@ -175,7 +175,6 @@ const Auth = () => {
                       <SelectItem value="analyst">Analyst</SelectItem>
                       <SelectItem value="investigator">Investigator</SelectItem>
                       <SelectItem value="legal">Legal</SelectItem>
-                      <SelectItem value="admin">Admin</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

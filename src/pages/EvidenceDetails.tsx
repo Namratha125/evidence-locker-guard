@@ -115,14 +115,29 @@ const EvidenceDetails = () => {
     if (filePath && /^https?:\/\//.test(filePath)) return filePath;
   
     // If the path already contains 'uploads/', just prefix API base
-    if (filePath && /uploads\//.test(filePath)) {
-      const normalized = filePath.replace(/^\/+/, "");
-      return `${API_BASE}/api/${normalized}`;
+    if (filePath) {
+      // Normalize Windows backslashes to forward slashes
+      let normalized = filePath.replace(/\\/g, "/");
+      // Trim leading slashes
+      normalized = normalized.replace(/^\/+/, "");
+
+      if (/uploads\//.test(normalized)) {
+        return `${API_BASE}/api/${normalized}`;
+      }
+      // If filePath looks like just a filename, fallthrough to recursive endpoint
+      if (!normalized.includes("/")) {
+        return `${API_BASE}/api/evidence/${encodeURIComponent(normalized)}`;
+      }
+      // As a final attempt, try serving via recursive evidence endpoint using the filename portion
+      const parts = normalized.split("/");
+      const fname = parts[parts.length - 1];
+      return `${API_BASE}/api/evidence/${encodeURIComponent(fname)}`;
     }
   
     // Force fallback to uploads/general if nothing else matches
     const fileName = opts?.fileName || filePath;
-    return `${API_BASE}/api/uploads/general/${fileName}`;
+    // Prefer the recursive evidence endpoint which will search uploads/ recursively
+    return `${API_BASE}/api/evidence/${encodeURIComponent(fileName || '')}`;
   };
 
   const fileUrl = fileUrlFromEvidence(evidence?.file_path, {
