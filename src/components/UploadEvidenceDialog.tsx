@@ -21,6 +21,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { Upload } from "lucide-react";
+import { authFetch } from '@/lib/api';
 
 interface UploadEvidenceDialogProps {
   open: boolean;
@@ -70,9 +71,7 @@ const UploadEvidenceDialog = ({
     try {
       const url = new URL(`${API_BASE}/api/cases`);
       url.searchParams.set("status", "active");
-      const res = await fetch(url.toString(), {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
+      const res = await authFetch(url.toString());
       if (!res.ok) {
         const err = await res.json().catch(() => ({ message: res.statusText }));
         throw new Error(err.message || "Failed to fetch cases");
@@ -155,13 +154,10 @@ const UploadEvidenceDialog = ({
       fd.append("uploaded_by", user.id);
       fd.append("status", "pending");
 
-      const res = await fetch(`${API_BASE}/api/evidence/upload`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: fd,
-      });
+        const res = await authFetch('/api/evidence/upload', {
+          method: "POST",
+          body: fd,
+        });
 
       const resJson = await res.json().catch(() => ({}));
       if (!res.ok) {

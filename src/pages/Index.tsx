@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { FolderOpen, FileText, Tag } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { authFetch } from '@/lib/api';
 
 interface DashboardStats {
   totalCases: number;
@@ -31,7 +32,7 @@ const Index = () => {
 
   const fetchDashboardData = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/dashboard/stats`);
+      const res = await authFetch('/api/dashboard/stats');
       if (!res.ok) throw new Error("Failed to fetch dashboard data");
       const data = await res.json();
       setStats(data);

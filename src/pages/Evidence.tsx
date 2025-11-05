@@ -83,8 +83,7 @@ const Evidence = () => {
   const [tags, setTags] = useState<Array<{ id: string; name: string; color: string }>>([]);
   const { toast } = useToast();
 
-  const { profile } = useAuth();
-
+  const { profile, token } = useAuth();
   useEffect(() => {
     if (profile) {
       fetchEvidence();
@@ -129,7 +128,7 @@ const Evidence = () => {
         url += `?userId=${profile.id}`;
       }
       
-      const res = await fetch(url);
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error('Failed to fetch evidence');
       const data = await res.json();
       setEvidence(data || []);
@@ -156,7 +155,7 @@ const Evidence = () => {
         url += `?userId=${profile.id}`;
       }
       
-      const res = await fetch(url);
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error('Failed to fetch cases');
       const data = await res.json();
       setCases(data || []);
@@ -177,7 +176,7 @@ const Evidence = () => {
         url += `?userId=${profile.id}`;
       }
       
-      const res = await fetch(url);
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error('Failed to fetch tags');
       const data = await res.json();
       setTags(data || []);
@@ -281,7 +280,7 @@ const Evidence = () => {
     try {
       const res = await fetch(`${API_BASE}/api/evidence/${evidenceId}/status`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ status: newStatus }),
       });
 

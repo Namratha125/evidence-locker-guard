@@ -120,16 +120,42 @@ try {
 // Consolidated GET /evidence (with case & uploader info)
 router.get("/evidence", async (req, res) => {
   try {
-    const [rows] = await db.query(`
-      SELECT e.*,
-             c.case_number AS case_case_number,
-             c.title AS case_title,
-             p.full_name AS uploaded_by_full_name
-      FROM evidence e
-      LEFT JOIN cases c ON e.case_id = c.id
-      LEFT JOIN profiles p ON e.uploaded_by = p.id
-      ORDER BY e.created_at DESC
-    `);
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ message: "No token provided" });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret_key');
+    const userId = decoded.id;
+
+    // get user role
+    const [roleRows] = await db.query("SELECT role FROM profiles WHERE id = ?", [userId]);
+    const user = roleRows && roleRows[0];
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    let rows;
+    if (user.role === 'admin') {
+      [rows] = await db.query(`
+        SELECT e.*, c.case_number AS case_case_number, c.title AS case_title, p.full_name AS uploaded_by_full_name
+        FROM evidence e
+        LEFT JOIN cases c ON e.case_id = c.id
+        LEFT JOIN profiles p ON e.uploaded_by = p.id
+        ORDER BY e.created_at DESC
+      `);
+    } else {
+      [rows] = await db.query(`
+        SELECT DISTINCT e.*, c.case_number AS case_case_number, c.title AS case_title, p.full_name AS uploaded_by_full_name
+        FROM evidence e
+        LEFT JOIN chain_of_custody coc ON e.id = coc.evidence_id
+        LEFT JOIN cases c ON e.case_id = c.id
+        LEFT JOIN profiles p ON e.uploaded_by = p.id
+        WHERE e.uploaded_by = ?
+           OR c.assigned_to = ?
+           OR c.lead_investigator_id = ?
+           OR coc.to_user_id = ?
+        ORDER BY e.created_at DESC
+      `, [userId, userId, userId, userId]);
+    }
 
     const mapped = rows.map((r) => ({
       id: r.id,
@@ -367,13 +393,34 @@ router.post("/users", async (req, res) => {
   }
 
   try {
+    // Check if trying to create an admin account
+    if (role === 'admin') {
+      // Verify if request is from an existing admin
+      const token = req.headers.authorization?.split(' ')[1];
+      if (!token) {
+        return res.status(403).json({ message: "Only existing admins can create admin accounts" });
+      }
+
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret_key');
+        if (decoded.role !== 'admin') {
+          return res.status(403).json({ message: "Only existing admins can create admin accounts" });
+        }
+      } catch (err) {
+        return res.status(403).json({ message: "Invalid token" });
+      }
+    }
+
     const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
     const id = uuidv4();
+
+    // If no role specified or unauthorized admin attempt, default to analyst
+    const assignedRole = (role === 'admin' && req.headers.authorization) ? 'admin' : 'analyst';
 
     await db.query(
       `INSERT INTO profiles (id, username, full_name, role, badge_number, department, email, password, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
-      [id, username, full_name || username, role || "analyst", badge_number || null, department || null, email, hashedPassword]
+      [id, username, full_name || username, assignedRole, badge_number || null, department || null, email, hashedPassword]
     );
 
     res.status(201).json({ message: "User created successfully", id });
@@ -567,10 +614,37 @@ router.delete("/evidence/:id/tags/:tagId", async (req, res) => {
 // --------------------
 router.get("/cases", async (req, res) => {
   try {
-    const [rows] = await db.query("SELECT id, case_number, title, status FROM cases ORDER BY created_at DESC");
-    res.json(rows);
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ message: "No token provided" });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret_key');
+    const userId = decoded.id;
+
+    // First check if user exists and get their role
+    const [[user]] = await db.query("SELECT role FROM profiles WHERE id = ?", [userId]);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    let query;
+    if (user.role === 'admin') {
+      query = "SELECT * FROM cases ORDER BY created_at DESC";
+      const [rows] = await db.query(query);
+      res.json(rows);
+    } else {
+      query = `
+        SELECT * FROM cases 
+        WHERE created_by = ?
+           OR assigned_to = ?
+           OR lead_investigator_id = ?
+        ORDER BY created_at DESC`;
+      const [rows] = await db.query(query, [userId, userId, userId]);
+      res.json(rows);
+    }
   } catch (err) {
-    console.error("Error fetching cases", err);
+    console.error("Error fetching cases:", err);
     res.status(500).json({ message: "Failed to fetch cases" });
   }
 });
@@ -919,6 +993,11 @@ router.post("/auth/signup", async (req, res) => {
     return res.status(400).json({ message: "Email, password, and username are required" });
   }
 
+  // Never allow admin role through public signup
+  if (role === 'admin') {
+    return res.status(403).json({ message: "Cannot create admin accounts through public signup" });
+  }
+
   try {
     const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
     const id = uuidv4();
@@ -926,7 +1005,7 @@ router.post("/auth/signup", async (req, res) => {
     await db.query(
       `INSERT INTO profiles (id, username, full_name, role, badge_number, department, email, password, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
-      [id, username, full_name || username, role || "analyst", badge_number, department || null, email, hashedPassword]
+      [id, username, full_name || username, "analyst", badge_number, department || null, email, hashedPassword]
     );
 
     return res.status(201).json({ message: "User created successfully", id });

@@ -1,0 +1,147 @@
+import express from "express";
+import mysql from "mysql2/promise";
+import cors from "cors";
+import dotenv from "dotenv";
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import multer from "multer";
+import fs from "fs";
+import path from "path";
+import helmet from 'helmet';
+import { fileURLToPath } from "url";
+import pkg from "uuid";
+const { v4: uuidv4 } = pkg;
+
+dotenv.config();
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// ... [keep all existing code until the cases endpoint] ...
+
+// Modified cases endpoint
+router.get("/cases", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ message: "No token provided" });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret_key');
+    const userId = decoded.id;
+
+    // First check if user exists and get their role
+    const [[user]] = await db.query("SELECT role FROM profiles WHERE id = ?", [userId]);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    let query;
+    let queryParams = [];
+
+    if (user.role === 'admin') {
+      // Admins can see all cases
+      query = "SELECT * FROM cases ORDER BY created_at DESC";
+    } else {
+      // Other roles can only see cases they're involved with
+      query = `
+        SELECT * FROM cases 
+        WHERE created_by = ?
+           OR assigned_to = ?
+           OR lead_investigator_id = ?
+        ORDER BY created_at DESC`;
+      queryParams = [userId, userId, userId];
+    }
+
+    const [rows] = await db.query(query, queryParams);
+    res.json(rows);
+  } catch (err) {
+    console.error("Error fetching cases:", err);
+    res.status(500).json({ message: "Failed to fetch cases" });
+  }
+});
+
+// Modified evidence endpoint
+router.get("/evidence", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ message: "No token provided" });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret_key');
+    const userId = decoded.id;
+
+    // First check if user exists and get their role
+    const [[user]] = await db.query("SELECT role FROM profiles WHERE id = ?", [userId]);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    let query;
+    let queryParams = [];
+
+    if (user.role === 'admin') {
+      // Admins can see all evidence
+      query = `
+        SELECT e.*,
+               c.case_number AS case_case_number,
+               c.title AS case_title,
+               p.full_name AS uploaded_by_full_name
+        FROM evidence e
+        LEFT JOIN cases c ON e.case_id = c.id
+        LEFT JOIN profiles p ON e.uploaded_by = p.id
+        ORDER BY e.created_at DESC
+      `;
+    } else {
+      // Other roles can only see evidence they have access to
+      query = `
+        SELECT DISTINCT e.*,
+               c.case_number AS case_case_number,
+               c.title AS case_title,
+               p.full_name AS uploaded_by_full_name
+        FROM evidence e
+        LEFT JOIN chain_of_custody coc ON e.id = coc.evidence_id
+        LEFT JOIN cases c ON e.case_id = c.id
+        LEFT JOIN profiles p ON e.uploaded_by = p.id
+        WHERE e.uploaded_by = ?
+           OR c.assigned_to = ?
+           OR c.lead_investigator_id = ?
+           OR coc.to_user_id = ?
+        ORDER BY e.created_at DESC
+      `;
+      queryParams = [userId, userId, userId, userId];
+    }
+
+    const [rows] = await db.query(query, queryParams);
+
+    const mapped = rows.map((r) => ({
+      id: r.id,
+      case_id: r.case_id,
+      title: r.title,
+      description: r.description,
+      file_name: r.file_name,
+      file_path: r.file_path,
+      file_size: r.file_size,
+      file_type: r.file_type,
+      hash_value: r.hash_value,
+      status: r.status,
+      location_found: r.location_found,
+      collected_date: r.collected_date,
+      collected_by: r.collected_by,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+      uploaded_by: r.uploaded_by,
+      case: r.case_case_number ? { case_number: r.case_case_number, title: r.case_title } : null,
+      uploader: r.uploaded_by_full_name ? { full_name: r.uploaded_by_full_name } : null,
+    }));
+
+    res.json(mapped);
+  } catch (err) {
+    console.error("Error fetching evidence:", err);
+    res.status(500).json({ message: "Failed to fetch evidence" });
+  }
+});
+
+// ... [keep all remaining code] ...

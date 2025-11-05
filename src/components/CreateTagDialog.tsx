@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useAuth } from '@/hooks/useAuth';
+import { authFetch } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
@@ -41,13 +42,10 @@ const CreateTagDialog = ({ open, onOpenChange, onTagCreated }: CreateTagDialogPr
 
   setLoading(true);
   try {
-    const token = localStorage.getItem("token");
-
-    const res = await fetch(`${API_BASE}/api/tags`, {
+    const res = await authFetch('/api/tags', {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(token && { Authorization: `Bearer ${token}` }),
       },
       body: JSON.stringify({
         name,

@@ -69,7 +69,7 @@ export default function Cases() {
   const [users, setUsers] = useState<Array<{ id: string; full_name: string }>>([]);
   const { toast } = useToast();
 
-  const { profile } = useAuth();
+  const { profile, token } = useAuth();
 
   useEffect(() => {
     if (profile) {
@@ -93,7 +93,7 @@ export default function Cases() {
         // For non-admin users, only fetch cases they're involved with
         url += `?userId=${profile.id}`;
       }
-      const res = await axios.get(url);
+  const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
       let casesData = res.data;
 
       if (casesData && casesData.length > 0) {
@@ -102,7 +102,7 @@ export default function Cases() {
         const needsDetails = casesData.filter((c: any) => !c.created_at || c.assigned_to === undefined);
         if (needsDetails.length > 0) {
           try {
-            const detailPromises = needsDetails.map((c: any) => axios.get(`/api/cases/${c.id}`));
+            const detailPromises = needsDetails.map((c: any) => axios.get(`/api/cases/${c.id}`, { headers: { Authorization: `Bearer ${token}` } }));
             const detailsRes = await Promise.allSettled(detailPromises);
             const detailsMap = new Map<string, any>();
             detailsRes.forEach((r) => {
@@ -126,7 +126,7 @@ export default function Cases() {
 
         let profilesMap = new Map();
         if (userIds.length > 0) {
-          const profileRes = await axios.post('/api/profiles/by-ids', { ids: userIds });
+          const profileRes = await axios.post('/api/profiles/by-ids', { ids: userIds }, { headers: { Authorization: `Bearer ${token}` } });
           // Store both number and string versions of IDs to handle type mismatches
           profileRes.data.forEach((p: any) => {
             profilesMap.set(String(p.id), p);
@@ -167,7 +167,7 @@ export default function Cases() {
         url += `?relatedToUser=${profile.id}`;
       }
       
-      const res = await axios.get(url);
+  const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
       setUsers(res.data || []);
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -216,7 +216,7 @@ export default function Cases() {
 
   const updateCaseStatus = async (caseId: string, newStatus: string) => {
     try {
-      await axios.put(`/api/cases/${caseId}/status`, { status: newStatus });
+  await axios.put(`/api/cases/${caseId}/status`, { status: newStatus }, { headers: { Authorization: `Bearer ${token}` } });
 
       toast({
         title: 'Success',

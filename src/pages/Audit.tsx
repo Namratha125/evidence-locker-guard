@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Search, Filter, History, Download } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { authFetch } from '@/lib/api';
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -41,13 +42,7 @@ const Audit = () => {
 
   const fetchAuditLogs = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_BASE}/api/audit_logs`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-      });
+      const res = await authFetch('/api/audit_logs');
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to fetch audit logs");

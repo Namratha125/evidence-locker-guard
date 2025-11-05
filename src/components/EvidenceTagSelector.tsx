@@ -7,6 +7,7 @@ import { Check, ChevronsUpDown, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
+import { authFetch } from '@/lib/api';
 
 interface Tag {
   id: string;
@@ -21,7 +22,6 @@ interface EvidenceTagSelectorProps {
   disabled?: boolean;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const EvidenceTagSelector = ({ evidenceId, selectedTags, onTagsChange, disabled }: EvidenceTagSelectorProps) => {
   const [open, setOpen] = useState(false);
@@ -39,7 +39,7 @@ const EvidenceTagSelector = ({ evidenceId, selectedTags, onTagsChange, disabled 
   
   const fetchAllTags = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/tags`);
+  const res = await authFetch('/api/tags');
       if (!res.ok) throw new Error('Failed to load tags');
       const data = await res.json();
       
@@ -53,7 +53,7 @@ const EvidenceTagSelector = ({ evidenceId, selectedTags, onTagsChange, disabled 
   const fetchEvidenceTags = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/evidence/${encodeURIComponent(evidenceId)}/tags`);
+  const res = await authFetch(`/api/evidence/${encodeURIComponent(evidenceId)}/tags`);
       if (!res.ok) throw new Error('Failed to load evidence tags');
       const data = await res.json();
       // data is array [{id, name, color}, ...]
@@ -69,12 +69,9 @@ const EvidenceTagSelector = ({ evidenceId, selectedTags, onTagsChange, disabled 
     if (selectedTags.find(t => t.id === tag.id)) return;
 
     try {
-      const res = await fetch(`${API_BASE}/api/evidence/${encodeURIComponent(evidenceId)}/tags`, {
+      const res = await authFetch(`/api/evidence/${encodeURIComponent(evidenceId)}/tags`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tag_id: tag.id })
       });
 
@@ -96,11 +93,8 @@ const EvidenceTagSelector = ({ evidenceId, selectedTags, onTagsChange, disabled 
 
   const handleTagRemove = async (tagId: string) => {
     try {
-      const res = await fetch(`${API_BASE}/api/evidence/${encodeURIComponent(evidenceId)}/tags/${encodeURIComponent(tagId)}`, {
-        method: 'DELETE',
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        }
+      const res = await authFetch(`/api/evidence/${encodeURIComponent(evidenceId)}/tags/${encodeURIComponent(tagId)}`, {
+        method: 'DELETE'
       });
 
       if (!res.ok) {

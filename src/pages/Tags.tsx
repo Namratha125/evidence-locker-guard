@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { authFetch } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -67,7 +68,7 @@ const Tags = () => {
   // ✅ Fetch all tags (with evidence count + creator)
   const fetchTags = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/tags');
+  const res = await authFetch('/api/tags');
       if (!res.ok) throw new Error('Failed to fetch tags');
       const data = await res.json();
       setTags(data);
@@ -92,7 +93,7 @@ const Tags = () => {
   // ✅ Delete tag (MySQL API)
   const handleDeleteTag = async (tagId: string) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/tags/${tagId}`, {
+      const res = await authFetch(`/api/tags/${tagId}`, {
         method: 'DELETE',
       });
       if (!res.ok) throw new Error('Failed to delete tag');

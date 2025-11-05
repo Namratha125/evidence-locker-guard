@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { authFetch } from '@/lib/api';
 
 interface EditTagDialogProps {
   tag: { id: string; name: string; color: string } | null;
@@ -12,15 +13,12 @@ interface EditTagDialogProps {
   onOpenChange: (open: boolean) => void;
   onTagUpdated: () => void;
 }
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-
 const EditTagDialog = ({ tag, open, onOpenChange, onTagUpdated }: EditTagDialogProps) => {
   const [name, setName] = useState('');
   const [color, setColor] = useState('#3b82f6');
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-  const { user, token } = useAuth() as any; 
+  const { user } = useAuth() as any;
 
   useEffect(() => {
     if (tag) {
@@ -41,12 +39,9 @@ const EditTagDialog = ({ tag, open, onOpenChange, onTagUpdated }: EditTagDialogP
 
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/tags/${tag.id}`, {
+      const res = await authFetch(`/api/tags/${tag.id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim(), color: color.trim() })
       });
 
@@ -59,12 +54,9 @@ const EditTagDialog = ({ tag, open, onOpenChange, onTagUpdated }: EditTagDialogP
 
       // Optional: send audit log (server can also do this)
       try {
-        await fetch(`${API_BASE}/api/audit_logs`, {
+        await authFetch('/api/audit_logs', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             user_id: user.id,
             action: 'update',
